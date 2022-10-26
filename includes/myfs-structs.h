@@ -15,5 +15,16 @@
 #define NUM_OPEN_FILES 64
 
 // TODO: Add structures of your file system here
+struct file{
+    char* name;
+    int size;
+    int user;
+    int group;
+    mode_t mode;
+    int atime;
+    int mtime;
+    int ctime;
+    char* data;
+};
 
 #endif /* myfs_structs_h */

@@ -22,7 +22,8 @@ public:
     static MyInMemoryFS *Instance();
 
     // TODO: [PART 1] Add attributes of your file system here
-
+    file myfiles[NUM_DIR_ENTRIES];
+    int actualFiles;
     MyInMemoryFS();
     ~MyInMemoryFS();
 
