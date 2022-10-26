@@ -42,6 +42,8 @@
 /// @brief Constructor of the in-memory file system class.
 ///
 /// You may add your own constructor code here.
+
+int actualsize;
 MyInMemoryFS::MyInMemoryFS() : MyFS() {
 
     // TODO: [PART 1] Add your constructor code here
@@ -107,6 +109,15 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
+
+    for (int i = 0; i < myfiles->size; i++) {
+        if(strcmp(myfiles[i].name, path) == 0) {
+            myfiles[i].data->free();
+            myfiles[i].data = nullptr;
+            actualsize--;
+            return 0;
+        }
+    }
 
     RETURN(0);
 }
