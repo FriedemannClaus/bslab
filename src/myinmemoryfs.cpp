@@ -61,11 +61,11 @@ MyInMemoryFS::~MyInMemoryFS() {
 
     // TODO: [PART 1] Add your cleanup code here
 
-//    for (int i = 0; i < myfiles->size; i++) {
-//        if(myfiles[i].data != nullptr) {
-//            myfiles[i].data.free();
-//        }
-//    }
+    for (int i = 0; i < myfiles->size; i++) {
+        if(myfiles[i].data != nullptr) {
+            free(myfiles[i].data);
+        }
+    }
 }
 
 /// @brief Create a new file.
@@ -112,7 +112,7 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
 
     for (int i = 0; i < myfiles->size; i++) {
         if(strcmp(myfiles[i].name, path) == 0) {
-            myfiles[i].data->free();
+            free(myfiles[i].data);
             myfiles[i].data = nullptr;
             actualsize--;
             return 0;
@@ -133,6 +133,12 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
 /// \return 0 on success, -ERRNO on failure.
 int MyInMemoryFS::fuseRename(const char *path, const char *newpath) {
     LOGM();
+
+    bool fileNameExists = false
+
+    for (int i = 0; i < myfiles->size; i++) {
+        if (strcmp(newpath, myfiles[i]))
+    }
 
     // TODO: [PART 1] Implement this!
 
@@ -374,9 +380,14 @@ int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t fille
     if (strcmp(path, "/") ==
         0) // If the user is trying to show the files/directories of the root directory show the following
     {
-        filler(buf, "file54", NULL, 0);
-        filler(buf, "file349", NULL, 0);
-    }
+//        filler(buf, "file54", NULL, 0);
+//        filler(buf, "file349", NULL, 0);
+    for (int i = 0; i < myfiles->size; i++) {
+            if(strcmp(myfiles[i].name, path) == 0) {
+                myfiles[i].data = nullptr;
+                return 0;
+            }
+        }
 
     RETURN(0);
 }
