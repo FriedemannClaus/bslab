@@ -44,13 +44,13 @@
 /// You may add your own constructor code here.
 
 int actualsize;
+
 MyInMemoryFS::MyInMemoryFS() : MyFS() {
 
     // TODO: [PART 1] Add your constructor code here
-    file myfiles[NUM_DIR_ENTRIES];
     actualsize = 0;
     for (int i = 0; i < myfiles->size; i++) {
-            myfiles[i].data = nullptr;
+        myfiles[i].data = nullptr;
     }
 }
 
@@ -62,7 +62,7 @@ MyInMemoryFS::~MyInMemoryFS() {
     // TODO: [PART 1] Add your cleanup code here
 
     for (int i = 0; i < myfiles->size; i++) {
-        if(myfiles[i].data != nullptr) {
+        if (myfiles[i].data != nullptr) {
             free(myfiles[i].data);
         }
     }
@@ -80,23 +80,30 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
+
+    int ret = 0;
+
     struct file f{};
     size_t pathLength = strlen(path);
     if (pathLength > NAME_LENGTH) {
-        return -ENAMETOOLONG;
-    }
-    char tmp[pathLength];
-    strcpy(tmp, path);
-    f.mode = mode;
-    if (actualFiles < NUM_DIR_ENTRIES) {
-        myfiles[actualFiles] = f;
-        actualFiles += 1;
+        ret = -ENAMETOOLONG;
     } else {
-        return -ENOMEM;
+        f.name = char[pathLength];
+        char tmp[pathLength];
+            strcpy(tmp, path);
+
+            f.mode = mode;
+            if (actualFiles < NUM_DIR_ENTRIES) {
+                myfiles[actualFiles] = f;
+                actualFiles += 1;
+            } else {
+                ret = -ENOMEM;
+            }
     }
 
 
-    RETURN(0);
+
+    RETURN(ret);
 }
 
 /// @brief Delete a file.
@@ -110,8 +117,9 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
 
     // TODO: [PART 1] Implement this!
 
+
     for (int i = 0; i < myfiles->size; i++) {
-        if(strcmp(myfiles[i].name, path) == 0) {
+        if (strcmp(myfiles[i].name, path) == 0) {
             free(myfiles[i].data);
             myfiles[i].data = nullptr;
             actualsize--;
@@ -137,11 +145,10 @@ int MyInMemoryFS::fuseRename(const char *path, const char *newpath) {
     bool fileNameExists = false;
 
     for (int i = 0; i < myfiles->size; i++) {
-        if (strcmp(newpath, myfiles[i].name) == 0){
+        if (strcmp(newpath, myfiles[i].name) == 0) {
             fuseUnlink(myfiles[i].name);
         }
     }
-
 
 
     return 0;
@@ -379,19 +386,18 @@ int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t fille
     filler(buf, ".", NULL, 0); // Current Directory
     filler(buf, "..", NULL, 0); // Parent Directory
 
-    if (strcmp(path, "/") ==
-        0) // If the user is trying to show the files/directories of the root directory show the following
-    {
+    if (strcmp(path, "/") == 0) { // If the user is trying to show the files/directories of the root directory show the following
+
 //        filler(buf, "file54", NULL, 0);
 //        filler(buf, "file349", NULL, 0);
-    for (int i = 0; i < myfiles->size; i++) {
-            if(strcmp(myfiles[i].name, path) == 0) {
-                myfiles[i].data = nullptr;
-                return 0;
+        for (int i = 0; i < myfiles->size; i++) {
+            if(myfiles[i].data!= nullptr) {
+                filler(buf, myfiles[i].name, NULL, 0);
             }
         }
 
-    RETURN(0);
+        RETURN(0);
+    }
 }
 
 /// Initialize a file system.
@@ -399,11 +405,12 @@ int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t fille
 /// This function is called when the file system is mounted. You may add some initializing code here.
 /// \param [in] conn Can be ignored.
 /// \return 0.
-void MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
+void *MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
     // Open logfile
     this->logFile = fopen(((MyFsInfo *) fuse_get_context()->private_data)->logFile, "w+");
     if (this->logFile == NULL) {
-        fprintf(stderr, "ERROR: Cannot open logfile %s\n", ((MyFsInfo *) fuse_get_context()->private_data)->logFile);
+        fprintf(stderr, "ERROR: Cannot open logfile %s\n",
+                ((MyFsInfo *) fuse_get_context()->private_data)->logFile);
     } else {
         // turn of logfile buffering
         setvbuf(this->logFile, NULL, _IOLBF, 0);
@@ -426,7 +433,6 @@ void MyInMemoryFS::fuseDestroy() {
     LOGM();
 
     // TODO: [PART 1] Implement this!
-    return 0;
 }
 
 // TODO: [PART 1] You may add your own additional methods here!
@@ -439,4 +445,3 @@ void MyInMemoryFS::fuseDestroy() {
 void MyInMemoryFS::SetInstance() {
     MyFS::_instance = new MyInMemoryFS();
 }
-
