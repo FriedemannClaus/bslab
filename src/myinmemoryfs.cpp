@@ -134,13 +134,15 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
 int MyInMemoryFS::fuseRename(const char *path, const char *newpath) {
     LOGM();
 
-    bool fileNameExists = false
+    bool fileNameExists = false;
 
     for (int i = 0; i < myfiles->size; i++) {
-        if (strcmp(newpath, myfiles[i]))
+        if (strcmp(newpath, myfiles[i].name) == 0){
+            fuseUnlink(myfiles[i].name);
+        }
     }
 
-    // TODO: [PART 1] Implement this!
+
 
     return 0;
 }
@@ -397,7 +399,7 @@ int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t fille
 /// This function is called when the file system is mounted. You may add some initializing code here.
 /// \param [in] conn Can be ignored.
 /// \return 0.
-void *MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
+void MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
     // Open logfile
     this->logFile = fopen(((MyFsInfo *) fuse_get_context()->private_data)->logFile, "w+");
     if (this->logFile == NULL) {
@@ -411,6 +413,7 @@ void *MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
         LOG("Using in-memory mode");
 
         // TODO: [PART 1] Implement your initialization methods here
+
     }
 
     RETURN(0);
@@ -423,7 +426,7 @@ void MyInMemoryFS::fuseDestroy() {
     LOGM();
 
     // TODO: [PART 1] Implement this!
-
+    return 0;
 }
 
 // TODO: [PART 1] You may add your own additional methods here!
