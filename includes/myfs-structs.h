@@ -17,14 +17,15 @@
 // TODO: Add structures of your file system here
 struct file{
     char* name;
-    int size;
-    int user;
-    int group;
+    size_t size;
+    uid_t user;
+    gid_t group;
     mode_t mode;
-    int atime;
-    int mtime;
-    int ctime;
+    time_t atime;
+    time_t mtime;
+    time_t ctime;
     char* data;
+    bool open;
 };
 
 #endif /* myfs_structs_h */

@@ -15,6 +15,10 @@
 
 /// @brief In-memory implementation of a simple file system.
 class MyInMemoryFS : public MyFS {
+private:
+    virtual bool fileExists(const char *path);
+    virtual file* findFile(const char *name);
+
 protected:
     // BlockDevice blockDevice;
 
@@ -24,6 +28,7 @@ public:
     // TODO: [PART 1] Add attributes of your file system here
     file myfiles[NUM_DIR_ENTRIES];
     int actualFiles;
+    int openFiles;
     MyInMemoryFS();
     ~MyInMemoryFS();
 

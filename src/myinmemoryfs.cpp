@@ -59,6 +59,7 @@ MyInMemoryFS::~MyInMemoryFS() {
 
 }
 
+
 /// @brief Create a new file.
 ///
 /// Create a new file with given name and permissions.
@@ -73,8 +74,8 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     // TODO: [PART 1] Implement this!
 
     int ret = 0;
-    
-    file* fileIter = myfiles;
+
+    file *fileIter = myfiles;
     int i = 0;
     while ((fileIter->name != nullptr) && (i < NUM_DIR_ENTRIES)) {
         fileIter++;
@@ -85,6 +86,8 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     size_t pathLength = strlen(path);
     if (pathLength > NAME_LENGTH) {
         ret = -ENAMETOOLONG;
+    } else if (fileExists(path)) {
+        ret = -EEXIST;
     } else {
         char tmp[pathLength];
         strcpy(tmp, path);
@@ -92,9 +95,7 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
         f.mode = mode;
         if (actualFiles < NUM_DIR_ENTRIES) {
             *fileIter = f;
-            if (i >= actualFiles) {
-                actualFiles++;
-            }
+            actualFiles++;
         } else {
             ret = -ENOSPC;
         }
@@ -114,18 +115,22 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
-    int ret;
 
-    for (int i = 0; i < myfiles->size; i++) {
-        if (strcmp(myfiles[i].name, path) == 0) {
-            free(myfiles[i].data);
-            myfiles[i].name = nullptr;
-            actualFiles--;
-            ret = 0;
-        }
+    file *file = findFile(path);
+    if (file == nullptr) {
+        RETURN(-ENOENT);
+    }
+    if (file->open) {
+        RETURN(-EACCES);
     }
 
-    RETURN(ret);
+    free(file->data);
+    struct file f{};
+    f.name = nullptr;
+    f.data = nullptr;
+    *file = f;
+    actualFiles--;
+    RETURN(0);
 }
 
 /// @brief Rename a file.
@@ -140,16 +145,22 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
 int MyInMemoryFS::fuseRename(const char *path, const char *newpath) {
     LOGM();
 
-    bool fileNameExists = false;
-
-    for (int i = 0; i < myfiles->size; i++) {
-        if (strcmp(newpath, myfiles[i].name) == 0) {
-            fuseUnlink(myfiles[i].name);
-        }
+    file* file = findFile(path);
+    if (file == nullptr) {
+        RETURN(-ENOENT);
     }
-
-
-    return 0;
+    if (file->open) {
+        RETURN(-EACCES);
+    }
+    file* otherFile = findFile(newpath);
+    if (otherFile != nullptr) {
+        if(otherFile->open) {
+            RETURN(-EACCES);
+        }
+        fuseUnlink(newpath);
+    }
+    strcpy(file->name, newpath);
+    RETURN(0);
 }
 
 /// @brief Get file meta data.
@@ -180,22 +191,27 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
     //		            isn’t usually meaningful. For symbolic links this specifies the length of the file name the link
     //		            refers to.
 
-    statbuf->st_uid = getuid(); // The owner of the file/directory is the user who mounted the filesystem
-    statbuf->st_gid = getgid(); // The group of the file/directory is the same as the group of the user who mounted the filesystem
-    statbuf->st_atime = time(NULL); // The last "a"ccess of the file/directory is right now
-    statbuf->st_mtime = time(NULL); // The last "m"odification of the file/directory is right now
-
     int ret = 0;
 
-    if (strcmp(path, "/") == 0) {
-        statbuf->st_mode = S_IFDIR | 0755;
-        statbuf->st_nlink = 2; // Why "two" hardlinks instead of "one"? The answer is here: http://unix.stackexchange.com/a/101536
-    } else if (strcmp(path, "/file54") == 0 || (strcmp(path, "/file349") == 0)) {
-        statbuf->st_mode = S_IFREG | 0644;
-        statbuf->st_nlink = 1;
-        statbuf->st_size = 1024;
-    } else
+    file* myFile = findFile(path);
+
+    if (myFile != nullptr) {
+        statbuf->st_uid = getuid(); // The owner of the file/directory is the user who mounted the filesystem
+        statbuf->st_gid = getgid(); // The group of the file/directory is the same as the group of the user who mounted the filesystem
+        statbuf->st_atime = time(NULL); // The last "a"ccess of the file/directory is right now
+        statbuf->st_mtime = time(NULL); // The last "m"odification of the file/directory is right now
+
+        if (strcmp(path, "/") == 0) {
+            statbuf->st_mode = S_IFDIR | 0755;
+            statbuf->st_nlink = 2; // Why "two" hardlinks instead of "one"? The answer is here: http://unix.stackexchange.com/a/101536
+        } else {
+            statbuf->st_mode = S_IFREG | 0644;
+            statbuf->st_nlink = 1;
+            statbuf->st_size = myFile->size;
+        }
+    } else {
         ret = -ENOENT;
+    }
 
     RETURN(ret);
 }
@@ -211,8 +227,19 @@ int MyInMemoryFS::fuseChmod(const char *path, mode_t mode) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
+    int ret = 0;
 
-    RETURN(0);
+    file* myFile = findFile(path);
+    if(myFile != nullptr){
+        if(!myFile->open) {
+            myFile->mode=mode;
+        } else {
+            ret = -EACCES;
+        }
+    } else {
+        ret = -ENOENT;
+    }
+    RETURN(ret);
 }
 
 /// @brief Change the owner of a file.
@@ -227,8 +254,21 @@ int MyInMemoryFS::fuseChown(const char *path, uid_t uid, gid_t gid) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
+    int ret = 0;
 
-    RETURN(0);
+    file* myFile = findFile(path);
+    if (myFile != nullptr) {
+        if (!myFile->open) {
+            myFile->user = uid;
+            myFile->group = gid;
+        } else {
+            ret = -EACCES;
+        }
+    } else {
+        ret = -ENOENT;
+    }
+
+    RETURN(ret);
 }
 
 /// @brief Open a file.
@@ -242,7 +282,18 @@ int MyInMemoryFS::fuseChown(const char *path, uid_t uid, gid_t gid) {
 int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
+    // TODO: [PART 1] Implement this
+    file* myFile = findFile(path);
+    if (myFile != nullptr) {
+        if (openFiles < NUM_OPEN_FILES) {
+            myFile->open = true;
+            openFiles++;
+        } else {
+            RETURN(-EMFILE);
+        }
+    } else {
+        RETURN(-ENOENT);
+    }
 
     RETURN(0);
 }
@@ -271,7 +322,8 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
 
     LOGF("--> Trying to read %s, %lu, %lu\n", path, (unsigned long) offset, size);
 
-    char file54Text[] = "Hello World From File54!\n";
+
+    /*char file54Text[] = "Hello World From File54!\n";
     char file349Text[] = "Hello World From File349!\n";
     char *selectedText = NULL;
 
@@ -288,7 +340,22 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
 
     memcpy(buf, selectedText + offset, size);
 
-    RETURN((int) (strlen(selectedText) - offset));
+    RETURN((int) (strlen(selectedText) - offset));*/
+    int ret=0;
+
+    file* myFile=findFile(path);
+    if(myFile != nullptr){
+        if(myFile->open) {
+            // TODO: read file
+            memcpy(buf, myFile->data + offset, size);
+        } else {
+            ret = -EACCES;
+        }
+    } else {
+        ret = -ENOENT;
+    }
+
+    RETURN(ret);
 }
 
 /// @brief Write to a file.
@@ -405,13 +472,14 @@ int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t fille
 /// \param [in] conn Can be ignored.
 /// \return 0.
 void *MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
+    // printf("File System has been initialized");
     // Open logfile
     this->logFile = fopen(((MyFsInfo *) fuse_get_context()->private_data)->logFile, "w+");
     if (this->logFile == NULL) {
         fprintf(stderr, "ERROR: Cannot open logfile %s\n",
                 ((MyFsInfo *) fuse_get_context()->private_data)->logFile);
     } else {
-        // turn of logfile buffering
+        // turn off logfile buffering
         setvbuf(this->logFile, NULL, _IOLBF, 0);
 
         LOG("Starting logging...\n");
@@ -419,7 +487,9 @@ void *MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
         LOG("Using in-memory mode");
 
         // TODO: [PART 1] Implement your initialization methods here
+
         actualFiles = 0;
+        openFiles = 0;
         for (int i = 0; i < myfiles->size; i++) {
             myfiles[i].name = nullptr;
             myfiles[i].data = nullptr;
@@ -445,6 +515,24 @@ void MyInMemoryFS::fuseDestroy() {
 }
 
 // TODO: [PART 1] You may add your own additional methods here!
+
+bool MyInMemoryFS::fileExists(const char *path) {
+    for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
+        if (strcmp(myfiles[i].name, path) == 0) {
+            return true;
+        }
+    }
+}
+
+file* MyInMemoryFS::findFile(const char *path) {
+    for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
+        if (strcmp(myfiles[i].name, path) == 0) {
+            return &myfiles[i];
+        }
+    }
+    return nullptr;
+}
+
 int MyInMemoryFS::test() {
     RETURN(42);
 }
