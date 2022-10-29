@@ -92,7 +92,7 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
         f.mode = mode;
         if (actualFiles < NUM_DIR_ENTRIES) {
             *fileIter = f;
-            if (i > actualFiles) {
+            if (i >= actualFiles) {
                 actualFiles++;
             }
         } else {
@@ -114,18 +114,18 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     LOGM();
 
     // TODO: [PART 1] Implement this!
-
+    int ret;
 
     for (int i = 0; i < myfiles->size; i++) {
         if (strcmp(myfiles[i].name, path) == 0) {
             free(myfiles[i].data);
             myfiles[i].name = nullptr;
             actualFiles--;
-            return 0;
+            ret = 0;
         }
     }
 
-    RETURN(0);
+    RETURN(ret);
 }
 
 /// @brief Rename a file.
