@@ -46,8 +46,8 @@ public:
     virtual int fuseReaddir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fileInfo);
     virtual int fuseTruncate(const char *path, off_t offset, struct fuse_file_info *fileInfo);
     virtual void fuseDestroy();
-
     // TODO: Add methods of your file system here
+    virtual int test();
 
 };
 

@@ -43,15 +43,10 @@
 ///
 /// You may add your own constructor code here.
 
-int actualsize;
-
 MyInMemoryFS::MyInMemoryFS() : MyFS() {
 
     // TODO: [PART 1] Add your constructor code here
-    actualsize = 0;
-    for (int i = 0; i < myfiles->size; i++) {
-        myfiles[i].data = nullptr;
-    }
+
 }
 
 /// @brief Destructor of the in-memory file system class.
@@ -61,11 +56,7 @@ MyInMemoryFS::~MyInMemoryFS() {
 
     // TODO: [PART 1] Add your cleanup code here
 
-    for (int i = 0; i < myfiles->size; i++) {
-        if (myfiles[i].data != nullptr) {
-            free(myfiles[i].data);
-        }
-    }
+
 }
 
 /// @brief Create a new file.
@@ -82,25 +73,32 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     // TODO: [PART 1] Implement this!
 
     int ret = 0;
+    
+    file* fileIter = myfiles;
+    int i = 0;
+    while ((fileIter->name != nullptr) && (i < NUM_DIR_ENTRIES)) {
+        fileIter++;
+        i++;
+    }
 
     struct file f{};
     size_t pathLength = strlen(path);
     if (pathLength > NAME_LENGTH) {
         ret = -ENAMETOOLONG;
     } else {
-        f.name = char[pathLength];
         char tmp[pathLength];
-            strcpy(tmp, path);
-
-            f.mode = mode;
-            if (actualFiles < NUM_DIR_ENTRIES) {
-                myfiles[actualFiles] = f;
-                actualFiles += 1;
-            } else {
-                ret = -ENOMEM;
+        strcpy(tmp, path);
+        f.name = tmp;
+        f.mode = mode;
+        if (actualFiles < NUM_DIR_ENTRIES) {
+            *fileIter = f;
+            if (i > actualFiles) {
+                actualFiles++;
             }
+        } else {
+            ret = -ENOSPC;
+        }
     }
-
 
 
     RETURN(ret);
@@ -121,8 +119,8 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     for (int i = 0; i < myfiles->size; i++) {
         if (strcmp(myfiles[i].name, path) == 0) {
             free(myfiles[i].data);
-            myfiles[i].data = nullptr;
-            actualsize--;
+            myfiles[i].name = nullptr;
+            actualFiles--;
             return 0;
         }
     }
@@ -386,12 +384,13 @@ int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t fille
     filler(buf, ".", NULL, 0); // Current Directory
     filler(buf, "..", NULL, 0); // Parent Directory
 
-    if (strcmp(path, "/") == 0) { // If the user is trying to show the files/directories of the root directory show the following
+    if (strcmp(path, "/") ==
+        0) { // If the user is trying to show the files/directories of the root directory show the following
 
 //        filler(buf, "file54", NULL, 0);
 //        filler(buf, "file349", NULL, 0);
         for (int i = 0; i < myfiles->size; i++) {
-            if(myfiles[i].data!= nullptr) {
+            if (myfiles[i].name != nullptr) {
                 filler(buf, myfiles[i].name, NULL, 0);
             }
         }
@@ -420,6 +419,11 @@ void *MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
         LOG("Using in-memory mode");
 
         // TODO: [PART 1] Implement your initialization methods here
+        actualFiles = 0;
+        for (int i = 0; i < myfiles->size; i++) {
+            myfiles[i].name = nullptr;
+            myfiles[i].data = nullptr;
+        }
 
     }
 
@@ -433,10 +437,17 @@ void MyInMemoryFS::fuseDestroy() {
     LOGM();
 
     // TODO: [PART 1] Implement this!
+    for (int i = 0; i < myfiles->size; i++) {
+        if (myfiles[i].name != nullptr) {
+            free(myfiles[i].data);
+        }
+    }
 }
 
 // TODO: [PART 1] You may add your own additional methods here!
-
+int MyInMemoryFS::test() {
+    RETURN(42);
+}
 // DO NOT EDIT ANYTHING BELOW THIS LINE!!!
 
 /// @brief Set the static instance of the file system.

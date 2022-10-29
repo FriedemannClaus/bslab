@@ -10,9 +10,15 @@
 
 #include "tools.hpp"
 #include "myfs.h"
+#include "myinmemoryfs.h"
 
 // TODO: Implement your helper functions here!
 TEST_CASE("Test","Test1"){
-    MyFS fs();
+    MyInMemoryFS fs=MyInMemoryFS();
+    REQUIRE(fs.test()==42);
+}
 
+TEST_CASE("Files","fuseMknod"){
+    MyInMemoryFS fs=MyInMemoryFS();
+    fs.fuseInit(fuse_conn_info *conn);
 }
