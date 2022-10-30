@@ -80,7 +80,7 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     LOG("Mknod point 1");
     //file *fileIter = myFiles;
     int i = 0;
-    while ((myFiles[i].name != nullptr) && (i < NUM_DIR_ENTRIES)) {
+    while (strcmp(&myFiles[i].name[0], "\0") && (i < NUM_DIR_ENTRIES)) {
        // fileIter++; //Erste freie Stelle finden
         i++;
     }
@@ -107,6 +107,7 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
         //myFiles[i].name=tmp;
 
         //char tmp[pathLength] = myFiles[i].name;
+        myFiles[i].name[pathLength];
         strcpy(myFiles[i].name, path);
         LOGF("String myFiles[i = %d] after point 3 is: %s", i, myFiles[i].name);
         myFiles[i].mode = mode;
@@ -138,7 +139,7 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     }
 
     free(foundFile->data);
-    //foundFile->name = ""; Todo: überlegen ob / als Prüfung für einen leeren Namen reicht, oder ob wir bool nameEmpty brauchen
+    foundFile->name[0]='\0'; //Todo: überlegen ob / als Prüfung für einen leeren Namen reicht, oder ob wir bool nameEmpty brauchen
     actualFiles--;
     RETURN(0);
 }
@@ -406,6 +407,13 @@ int MyInMemoryFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo)
     LOGM();
 
     // TODO: [PART 1] Implement this!
+    file* myFile = findFile(path);
+    if (myFile != nullptr) {
+            myFile->open = false;
+            openFiles--;
+    } else {
+        RETURN(-ENOENT);
+    }
 
     RETURN(0);
 }
