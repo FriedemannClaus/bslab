@@ -16,8 +16,8 @@
 
 // TODO: Add structures of your file system here
 struct file{
-    char* name;
-    size_t size;
+    char name[NAME_LENGTH]="";
+    size_t dataSize;
     uid_t user;
     gid_t group;
     mode_t mode;
