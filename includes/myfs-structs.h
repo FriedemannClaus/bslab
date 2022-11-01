@@ -14,7 +14,6 @@
 #define NUM_DIR_ENTRIES 64
 #define NUM_OPEN_FILES 64
 
-// TODO: Add structures of your file system here
 struct file{
     char name[NAME_LENGTH]="";
     size_t dataSize;

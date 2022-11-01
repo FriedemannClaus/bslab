@@ -71,35 +71,24 @@ MyInMemoryFS::~MyInMemoryFS() {
 int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
-
-
     if (actualFiles >= NUM_DIR_ENTRIES) {
         RETURN(-ENOSPC);
     }
-    LOG("Mknod point 1");
     int i = 0;
     while ((myFiles[i].name[0]!= '\0' ) && (i < NUM_DIR_ENTRIES)) {
         i++;
     }
-    LOGF("Mknod point 2. I is: %d", i);
-
     size_t pathLength = strlen(path);
     if (pathLength > NAME_LENGTH) {
-        LOG("Mknod Name too long");
         RETURN(-ENAMETOOLONG);
     } else if (fileExists(path)) {
-        LOG("Mknod File Exists");
         RETURN(-EEXIST);
     } else {
-        LOG("Mknod point 3");
         strcpy(myFiles[i].name, path);
-        LOGF("String myFiles[i = %d] after point 3 is: %s", i, myFiles[i].name);
         myFiles[i].mode = mode;
 
         actualFiles++;
     }
-
 
     RETURN(0);
 }
@@ -112,8 +101,6 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
 /// \return 0 on success, -ERRNO on failure.
 int MyInMemoryFS::fuseUnlink(const char *path) {
     LOGM();
-
-    // TODO: [PART 1] Implement this!
 
     file *foundFile = findFile(path);
     if (foundFile == nullptr) {
@@ -169,8 +156,6 @@ int MyInMemoryFS::fuseRename(const char *path, const char *newpath) {
 int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
-
     LOGF("\tAttributes of %s requested\n", path);
 
     // GNU's definitions of the attributes (http://www.gnu.org/software/libc/manual/html_node/Attribute-Meanings.html):
@@ -188,19 +173,14 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
     //		            isn’t usually meaningful. For symbolic links this specifies the length of the file name the link
     //		            refers to.
 
-    int ret = 0;
 
     if (strcmp(path, "/") == 0) {
         statbuf->st_mode = S_IFDIR | 0755;
         statbuf->st_nlink = 2; // Why "two" hardlinks instead of "one"? The answer is here: http://unix.stackexchange.com/a/101536
-        RETURN(ret);
+        RETURN(0);
     }
-
     file *myFile = findFile(path);
-
     if (myFile != nullptr) {
-        LOG("\tFile found\n");
-        LOGF("Filename: %s", myFile->name);
         statbuf->st_uid = getuid(); // The owner of the file/directory is the user who mounted the filesystem
         statbuf->st_gid = getgid(); // The group of the file/directory is the same as the group of the user who mounted the filesystem
         statbuf->st_atime = time(NULL); // The last "a"ccess of the file/directory is right now
@@ -210,11 +190,10 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
         statbuf->st_nlink = 1;
         statbuf->st_size = myFile->dataSize;
     } else {
-        LOG("File not found(we are in getAttr()). Return -ENOENT");
-        ret = -ENOENT;
+        RETURN(-ENOENT);
     }
 
-    RETURN(ret);
+    RETURN(0);
 }
 
 /// @brief Change file permissions.
@@ -227,20 +206,17 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
 int MyInMemoryFS::fuseChmod(const char *path, mode_t mode) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
-    int ret = 0;
-
     file *myFile = findFile(path);
     if (myFile != nullptr) {
         if (!myFile->open) {
             myFile->mode = mode;
         } else {
-            ret = -EACCES;
+            RETURN(-EACCES);
         }
     } else {
-        ret = -ENOENT;
+        RETURN(-ENOENT);
     }
-    RETURN(ret);
+    RETURN(0);
 }
 
 /// @brief Change the owner of a file.
@@ -254,22 +230,19 @@ int MyInMemoryFS::fuseChmod(const char *path, mode_t mode) {
 int MyInMemoryFS::fuseChown(const char *path, uid_t uid, gid_t gid) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
-    int ret = 0;
-
     file *myFile = findFile(path);
     if (myFile != nullptr) {
         if (!myFile->open) {
             myFile->user = uid;
             myFile->group = gid;
         } else {
-            ret = -EACCES;
+            RETURN(-EACCES);
         }
     } else {
-        ret = -ENOENT;
+        RETURN(-ENOENT);
     }
 
-    RETURN(ret);
+    RETURN(0);
 }
 
 /// @brief Open a file.
@@ -283,7 +256,6 @@ int MyInMemoryFS::fuseChown(const char *path, uid_t uid, gid_t gid) {
 int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
     LOGM();
 
-    // TODO: [PART 1] Implement this
     file *myFile = findFile(path);
     if (myFile != nullptr) {
         if (openFiles < NUM_OPEN_FILES) {
@@ -319,29 +291,7 @@ int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
 int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
-
     LOGF("--> Trying to read %s, %lu, %lu\n", path, (unsigned long) offset, size);
-
-
-    /*char file54Text[] = "Hello World From File54!\n";
-    char file349Text[] = "Hello World From File349!\n";
-    char *selectedText = NULL;
-
-    // ... //
-
-    if (strcmp(path, "/file54") == 0)
-        selectedText = file54Text;
-    else if (strcmp(path, "/file349") == 0)
-        selectedText = file349Text;
-    else
-        return -ENOENT;
-
-    // ... //
-
-    memcpy(buf, selectedText + offset, size);
-
-    RETURN((int) (strlen(selectedText) - offset));*/
 
     file *myFile = findFile(path);
     if (myFile != nullptr) {
@@ -354,7 +304,6 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
                     sizeToRead = size;
                 }
                 memcpy(buf, myFile->data + offset, sizeToRead);
-                LOGF("Read file data: %s",buf);
                 RETURN(sizeToRead);
             } else {
                 RETURN(-EBADF);
@@ -386,7 +335,6 @@ int
 MyInMemoryFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
     file* myFile = findFile(path);
     if (myFile != nullptr) {
         if (myFile->open) {
@@ -401,10 +349,8 @@ MyInMemoryFS::fuseWrite(const char *path, const char *buf, size_t size, off_t of
             RETURN(-EBADF);
         }
     } else {
-        RETURN(-ENOENT)
+        RETURN(-ENOENT);
     }
-
-    RETURN(0);
 }
 
 /// @brief Close a file.
@@ -416,7 +362,6 @@ MyInMemoryFS::fuseWrite(const char *path, const char *buf, size_t size, off_t of
 int MyInMemoryFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
     file *myFile = findFile(path);
     if (myFile != nullptr) {
         myFile->open = false;
@@ -439,7 +384,6 @@ int MyInMemoryFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo)
 int MyInMemoryFS::fuseTruncate(const char *path, off_t newSize) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
     file *myFile= findFile(path);
     if(myFile!= nullptr){
         myFile->data= (char *) (realloc(myFile->data, newSize));
@@ -450,7 +394,7 @@ int MyInMemoryFS::fuseTruncate(const char *path, off_t newSize) {
     } else {
         RETURN(-ENOENT);
     }
-    return 0;
+    RETURN(0);
 }
 
 /// @brief Truncate a file.
@@ -466,7 +410,6 @@ int MyInMemoryFS::fuseTruncate(const char *path, off_t newSize) {
 int MyInMemoryFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_info *fileInfo) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
     file* myFile= findFile(path);
     if(myFile!= nullptr){
         if(myFile->open){
@@ -492,16 +435,12 @@ int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t fille
                               struct fuse_file_info *fileInfo) {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
     LOGF("--> Getting The List of Files of %s\n", path);
 
     filler(buf, ".", NULL, 0); // Current Directory
     filler(buf, "..", NULL, 0); // Parent Directory
 
     if (strcmp(path, "/") ==0) { // If the user is trying to show the files/directories of the root directory show the following
-
-//        filler(buf, "file54", NULL, 0);
-        //filler(buf, "file349", NULL, 0);
         for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
             if (myFiles[i].name[0]=='/') {
                 //char tmp[NAME_LENGTH] = "";
@@ -521,7 +460,6 @@ int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t fille
 /// \param [in] conn Can be ignored.
 /// \return 0.
 void *MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
-    // printf("File System has been initialized");
     // Open logfile
     this->logFile = fopen(((MyFsInfo *) fuse_get_context()->private_data)->logFile, "w+");
     if (this->logFile == NULL) {
@@ -535,12 +473,9 @@ void *MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
 
         LOG("Using in-memory mode");
 
-        // TODO: [PART 1] Implement your initialization methods here
-
         actualFiles = 0;
         openFiles = 0;
         for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
-            //myFiles[i].name = nullptr;
             myFiles[i].data = nullptr;
             myFiles[i].dataSize=0;
         }
@@ -556,21 +491,19 @@ void *MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
 void MyInMemoryFS::fuseDestroy() {
     LOGM();
 
-    // TODO: [PART 1] Implement this!
-    for (int i = 0; i < myFiles->dataSize; i++) {
+    for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
         if (myFiles[i].name != nullptr) {
             free(myFiles[i].data);
         }
     }
 }
 
-// TODO: [PART 1] You may add your own additional methods here!
+// Additional methods:
 
 bool MyInMemoryFS::fileExists(const char *path) {
     for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
         if (myFiles[i].name[0] == '/') {
             if (strcmp(myFiles[i].name, path) == 0) {
-                LOG("\tFile found in fileExists\n");
                 return true;
             }
         }
@@ -581,18 +514,13 @@ file *MyInMemoryFS::findFile(const char *path) {
     for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
         if (myFiles[i].name[0] != '\0') {
             if (strcmp(myFiles[i].name, path) == 0) {
-                LOG("\tFile found\n");
                 return &myFiles[i];
             }
         }
     }
-    LOG("\tFile not found\n");
     return nullptr;
 }
 
-int MyInMemoryFS::test() {
-    RETURN(42);
-}
 // DO NOT EDIT ANYTHING BELOW THIS LINE!!!
 
 /// @brief Set the static instance of the file system.
