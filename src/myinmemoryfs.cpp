@@ -79,7 +79,7 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     }
     LOG("Mknod point 1");
     int i = 0;
-    while ((strcmp(&myFiles[i].name[0], "\0") != 0) && (i < NUM_DIR_ENTRIES)) {
+    while ((myFiles[i].name[0]!= '\0' ) && (i < NUM_DIR_ENTRIES)) {
         i++;
     }
     LOGF("Mknod point 2. I is: %d", i);
@@ -122,8 +122,11 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     if (foundFile->open) {
         RETURN(-EACCES);
     }
-    LOG("before free");
+    LOGF("Data to free %s",foundFile->data);
     free(foundFile->data);
+    LOGF("Data after free %s",foundFile->data);
+    foundFile->data = nullptr;
+    foundFile->dataSize=0;
     LOG("after free");
     foundFile->name[0] = '\0'; //Todo: überlegen ob / als Prüfung für einen leeren Namen reicht, oder ob wir bool nameEmpty brauchen
     LOG("reset name");
@@ -208,7 +211,7 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
         statbuf->st_atime = time(NULL); // The last "a"ccess of the file/directory is right now
         statbuf->st_mtime = time(NULL); // The last "m"odification of the file/directory is right now
 
-        statbuf->st_mode = S_IFREG | 0644;
+        statbuf->st_mode = myFile->mode;
         statbuf->st_nlink = 1;
         statbuf->st_size = myFile->dataSize;
     } else {
@@ -348,16 +351,25 @@ int MyInMemoryFS::fuseRead(const char *path, char *buf, size_t size, off_t offse
     file *myFile = findFile(path);
     if (myFile != nullptr) {
         if (myFile->open) {
-            // TODO: read file
-            memcpy(buf, myFile->data + offset, size);
-            RETURN(size);
+            if (myFile->data != nullptr) {
+                int sizeToRead;
+                if(myFile->dataSize < size + offset){
+                    sizeToRead = myFile->dataSize - offset;
+                } else {
+                    sizeToRead = size;
+                }
+                memcpy(buf, myFile->data + offset, sizeToRead);
+                LOGF("Read file data: %s",buf);
+                RETURN(sizeToRead);
+            } else {
+                RETURN(-EBADF);
+            }
         } else {
             RETURN(-EACCES);
         }
     } else {
         RETURN(-ENOENT);
     }
-
 }
 
 /// @brief Write to a file.
@@ -383,8 +395,8 @@ MyInMemoryFS::fuseWrite(const char *path, const char *buf, size_t size, off_t of
     file* myFile = findFile(path);
     if (myFile != nullptr) {
         if (myFile->open) {
-            if (myFile->dataSize <= size + offset) {
-                fuseTruncate(path,(size+myFile->dataSize)-offset);
+            if (myFile->dataSize < (size + offset)) {
+                fuseTruncate(path,size+offset);
                 memcpy(myFile->data+offset,buf,size);
             } else {
                 memcpy(myFile->data+offset,buf,size);
@@ -461,8 +473,15 @@ int MyInMemoryFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file
     LOGM();
 
     // TODO: [PART 1] Implement this!
-
-    RETURN(0);
+    file* myFile= findFile(path);
+    if(myFile!= nullptr){
+        if(myFile->open){
+            RETURN(fuseTruncate(path,newSize));
+        } else {
+            RETURN(-EACCES);
+        }
+    }
+    RETURN(-ENOENT);
 }
 
 /// @brief Read a directory.
@@ -529,6 +548,7 @@ void *MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
         for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
             //myFiles[i].name = nullptr;
             myFiles[i].data = nullptr;
+            myFiles[i].dataSize=0;
         }
 
     }
@@ -565,7 +585,7 @@ bool MyInMemoryFS::fileExists(const char *path) {
 
 file *MyInMemoryFS::findFile(const char *path) {
     for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
-        if (myFiles[i].name[0] == '/') {
+        if (myFiles[i].name[0] != '\0') {
             if (strcmp(myFiles[i].name, path) == 0) {
                 LOG("\tFile found\n");
                 return &myFiles[i];
