@@ -122,16 +122,11 @@ int MyInMemoryFS::fuseUnlink(const char *path) {
     if (foundFile->open) {
         RETURN(-EACCES);
     }
-    LOGF("Data to free %s",foundFile->data);
     free(foundFile->data);
-    LOGF("Data after free %s",foundFile->data);
     foundFile->data = nullptr;
     foundFile->dataSize=0;
-    LOG("after free");
-    foundFile->name[0] = '\0'; //Todo: überlegen ob / als Prüfung für einen leeren Namen reicht, oder ob wir bool nameEmpty brauchen
-    LOG("reset name");
+    foundFile->name[0] = '\0';
     actualFiles--;
-    LOG("actual files --");
     RETURN(0);
 }
 
@@ -401,7 +396,6 @@ MyInMemoryFS::fuseWrite(const char *path, const char *buf, size_t size, off_t of
             } else {
                 memcpy(myFile->data+offset,buf,size);
             }
-            LOGF("File contains: %s",myFile->data);
             RETURN(size);
         } else {
             RETURN(-EBADF);
