@@ -26,8 +26,6 @@ public:
     static MyInMemoryFS *Instance();
 
     file myFiles[NUM_DIR_ENTRIES];
-    int actualFiles;
-    int openFiles;
     MyInMemoryFS();
     ~MyInMemoryFS();
 

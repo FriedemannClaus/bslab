@@ -15,20 +15,22 @@
 #define DEBUG_RETURN_VALUES
 
 #include <unistd.h>
-#include <string.h>
 #include <errno.h>
+#include <string.h>
+//Bei Problemen mit memcpy vll #include <cstring> wieder hinzufügen (ist eig ähnlich wie <string.h>)
 
 #include "macros.h"
 #include "myfs.h"
 #include "myfs-info.h"
 #include "blockdevice.h"
 
+
 /// @brief Constructor of the on-disk file system class.
 ///
 /// You may add your own constructor code here.
 MyOnDiskFS::MyOnDiskFS() : MyFS() {
     // create a block device object
-    this->blockDevice= new BlockDevice(BLOCK_SIZE);
+    this->blockDevice = new BlockDevice(BLOCK_SIZE);
 
     // TODO: [PART 2] Add your constructor code here
 
@@ -58,6 +60,36 @@ int MyOnDiskFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
 
     // TODO: [PART 2] Implement this!
 
+    if (actualFiles >= NUM_DIR_ENTRIES) {
+        RETURN(-ENOSPC);
+    }
+    int i = 0;
+    while ((root[i].name[0]!= '\0' ) && (i < NUM_DIR_ENTRIES)) {
+        i++;
+    }
+    size_t pathLength = strlen(path);
+    if (pathLength > NAME_LENGTH) {
+        RETURN(-ENAMETOOLONG);
+    } else if (fileExists(path)) {
+        RETURN(-EEXIST);
+    } else {
+        strcpy(root[i].name, path);
+        root[i].mode = mode;
+
+        //write root to disc
+        char puffer[BLOCK_SIZE];
+        for(int i = 0; i < (double) sizeof(root) / BLOCK_SIZE; i++){
+            if(i > sizeof(root)/BLOCK_SIZE){
+                memcpy(puffer, &root + i * BLOCK_SIZE, sizeof(root) - i * BLOCK_SIZE);
+            } else {
+                memcpy(puffer, &root + i * BLOCK_SIZE, BLOCK_SIZE);
+            }
+            blockDevice->write(sBlock.rootAddress + i, puffer); //Block 11ff. = rootAddress lesen
+        }
+
+        actualFiles++;
+    }
+
     RETURN(0);
 }
 
@@ -72,6 +104,36 @@ int MyOnDiskFS::fuseUnlink(const char *path) {
 
     // TODO: [PART 2] Implement this!
 
+    file *foundFile = findFile(path);
+    if (foundFile == nullptr) {
+        RETURN(-ENOENT);
+    }
+    if (foundFile->open) {
+        RETURN(-EACCES);
+    }
+
+
+
+    if(foundFile->data != nullptr) {
+        bool finished = false;
+        int i = (long) foundFile->data;
+        while(!finished) {
+            if(fat[i] == EOF)
+                finished = true;
+            fat[i] = INT32_MAX;
+            dmap[i] = false;
+        }
+    }
+
+    foundFile->data = nullptr;
+    foundFile->dataSize=0;
+    foundFile->name[0] = '\0';
+
+    writeFatToDisc();
+    writeDmapToDisc();
+    writeRootToDisc();
+
+    actualFiles--;
     RETURN(0);
 }
 
@@ -89,6 +151,23 @@ int MyOnDiskFS::fuseRename(const char *path, const char *newpath) {
 
     // TODO: [PART 2] Implement this!
 
+    file *foundFile = findFile(path);
+    if (foundFile == nullptr) {
+        RETURN(-ENOENT);
+    }
+    if (foundFile->open) {
+        RETURN(-EACCES);
+    }
+    file *otherFile = findFile(newpath);
+    if (otherFile != nullptr) {
+        if (otherFile->open) {
+            RETURN(-EACCES);
+        }
+        fuseUnlink(newpath);
+    }
+    strcpy(foundFile->name, newpath);
+    writeRootToDisc();
+
     RETURN(0);
 }
 
@@ -102,6 +181,43 @@ int MyOnDiskFS::fuseGetattr(const char *path, struct stat *statbuf) {
     LOGM();
 
     // TODO: [PART 2] Implement this!
+
+    LOGF("\tAttributes of %s requested\n", path);
+
+    // GNU's definitions of the attributes (http://www.gnu.org/software/libc/manual/html_node/Attribute-Meanings.html):
+    // 		st_uid: 	The user ID of the file’s owner.
+    //		st_gid: 	The group ID of the file.
+    //		st_atime: 	This is the last access time for the file.
+    //		st_mtime: 	This is the time of the last modification to the contents of the file.
+    //		st_mode: 	Specifies the mode of the file. This includes file type information (see Testing File Type) and
+    //		            the file permission bits (see Permission Bits).
+    //		st_nlink: 	The number of hard links to the file. This count keeps track of how many directories have
+    //	             	entries for this file. If the count is ever decremented to zero, then the file itself is
+    //	             	discarded as soon as no process still holds it open. Symbolic links are not counted in the
+    //	             	total.
+    //		st_size:	This specifies the size of a regular file in bytes. For files that are really devices this field
+    //		            isn’t usually meaningful. For symbolic links this specifies the length of the file name the link
+    //		            refers to.
+
+
+    if (strcmp(path, "/") == 0) {
+        statbuf->st_mode = S_IFDIR | 0755;
+        statbuf->st_nlink = 2; // Why "two" hardlinks instead of "one"? The answer is here: http://unix.stackexchange.com/a/101536
+        RETURN(0);
+    }
+    file *myFile = findFile(path);
+    if (myFile != nullptr) {
+        statbuf->st_uid = getuid(); // The owner of the file/directory is the user who mounted the filesystem
+        statbuf->st_gid = getgid(); // The group of the file/directory is the same as the group of the user who mounted the filesystem
+        statbuf->st_atime = time(NULL); // The last "a"ccess of the file/directory is right now
+        statbuf->st_mtime = time(NULL); // The last "m"odification of the file/directory is right now
+
+        statbuf->st_mode = myFile->mode;
+        statbuf->st_nlink = 1;
+        statbuf->st_size = myFile->dataSize;
+    } else {
+        RETURN(-ENOENT);
+    }
 
     RETURN(0);
 }
@@ -118,6 +234,18 @@ int MyOnDiskFS::fuseChmod(const char *path, mode_t mode) {
 
     // TODO: [PART 2] Implement this!
 
+    file *myFile = findFile(path);
+    if (myFile != nullptr) {
+        if (!myFile->open) {
+            myFile->mode = mode;
+        } else {
+            RETURN(-EACCES);
+        }
+    } else {
+        RETURN(-ENOENT);
+    }
+    writeRootToDisc();
+
     RETURN(0);
 }
 
@@ -133,7 +261,18 @@ int MyOnDiskFS::fuseChown(const char *path, uid_t uid, gid_t gid) {
     LOGM();
 
     // TODO: [PART 2] Implement this!
-
+    file *myFile = findFile(path);
+    if (myFile != nullptr) {
+        if (!myFile->open) {
+            myFile->user = uid;
+            myFile->group = gid;
+        } else {
+            RETURN(-EACCES);
+        }
+    } else {
+        RETURN(-ENOENT);
+    }
+    writeRootToDisc();
     RETURN(0);
 }
 
@@ -149,6 +288,20 @@ int MyOnDiskFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
     LOGM();
 
     // TODO: [PART 2] Implement this!
+
+    file *myFile = findFile(path);
+    if (myFile != nullptr) {
+        if (openFiles < NUM_OPEN_FILES) {
+            myFile->open = true;
+            openFiles++;
+        } else {
+            RETURN(-EMFILE);
+        }
+    } else {
+        RETURN(-ENOENT);
+    }
+
+    writeRootToDisc();
 
     RETURN(0);
 }
@@ -210,6 +363,14 @@ int MyOnDiskFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo) {
     LOGM();
 
     // TODO: [PART 2] Implement this!
+    file *myFile = findFile(path);
+    if (myFile != nullptr) {
+        myFile->open = false;
+        openFiles--;
+    } else {
+        RETURN(-ENOENT);
+    }
+    writeRootToDisc();
 
     RETURN(0);
 }
@@ -263,6 +424,24 @@ int MyOnDiskFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t filler,
 
     // TODO: [PART 2] Implement this!
 
+    LOGM();
+
+    LOGF("--> Getting The List of Files of %s\n", path);
+
+    filler(buf, ".", NULL, 0); // Current Directory
+    filler(buf, "..", NULL, 0); // Parent Directory
+
+    if (strcmp(path, "/") ==0) { // If the user is trying to show the files/directories of the root directory show the following
+        for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
+            if (root[i].name[0]=='/') {
+                //char tmp[NAME_LENGTH] = "";
+                //strcpy(tmp, myFiles[i].name + 1);
+                filler(buf, root[i].name, NULL, 0);
+                LOGF("Found file: %s",root[i].name);
+            }
+        }
+    }
+
     RETURN(0);
 }
 
@@ -293,16 +472,80 @@ void* MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
 
             // TODO: [PART 2] Read existing structures form file
 
+            //Blocksize 512
+            char puffer[BLOCK_SIZE];
+            blockDevice->read(0, puffer); //Block 0 = superblock (immer, per def.) lesen
+            memcpy(&sBlock, puffer, sizeof(superblock));
+            for(int i = 0; i < (double) sizeof(dmap) / BLOCK_SIZE - 1; i++) {
+                blockDevice->read(sBlock.dmapAddress + i, puffer); //Block 1 = dmapAddress lesen
+                if(i > sizeof(dmap)/BLOCK_SIZE){
+                    sizeof(dmap) - i * BLOCK_SIZE;
+                    memcpy(&dmap + i * BLOCK_SIZE, puffer, sizeof(dmap) - i * BLOCK_SIZE);
+                } else {
+                    memcpy(&dmap + i * BLOCK_SIZE, puffer, BLOCK_SIZE);
+                }
+            }
+            for(int i = 0; i < (double) sizeof(fat) / BLOCK_SIZE; i++){
+                blockDevice->read(sBlock.fatAddress + i, puffer); //Block 3ff. = fatAddress lesen
+                if(i>sizeof(fat)/BLOCK_SIZE){
+                    memcpy(&fat + i * BLOCK_SIZE, puffer, sizeof(fat) - i * BLOCK_SIZE);
+                } else {
+                    memcpy(&fat + i * BLOCK_SIZE, puffer, BLOCK_SIZE);
+                }
+            }
+            for(int i = 0; i < (double) sizeof(root) / BLOCK_SIZE; i++){
+                blockDevice->read(sBlock.rootAddress + i, puffer); //Block 11ff. = rootAddress lesen
+                if(i > sizeof(root)/BLOCK_SIZE){
+                    memcpy(&root + i * BLOCK_SIZE, puffer, sizeof(root) - i * BLOCK_SIZE);
+                } else {
+                    memcpy(&root + i * BLOCK_SIZE, puffer, BLOCK_SIZE);
+                }
+            }
+
         } else if(ret == -ENOENT) {
             LOG("Container file does not exist, creating a new one");
 
             ret = this->blockDevice->create(((MyFsInfo *) fuse_get_context()->private_data)->contFile);
 
             if (ret >= 0) {
-
                 // TODO: [PART 2] Create empty structures in file
 
+                //(superblockAdress = Block 0)
+                int dmapAddress = 1;
+                int fatAddress = dmapAddress + ceil((double) sizeof(dmap) / BLOCK_SIZE);
+                int rootAddress = fatAddress + ceil((double) sizeof(fat) / BLOCK_SIZE);
+                int dataAddress = rootAddress + ceil((double) sizeof(root) / BLOCK_SIZE);
+                int dataSize = BLOCK_DEVICE_SIZE - dataAddress - 1;
+                sBlock = {1, fatAddress, rootAddress, dataAddress, BLOCK_DEVICE_SIZE, dataSize}; //ab Block 52 Filesystem
+
+                //Blocksize 512
+                char puffer[BLOCK_SIZE];
+                memcpy(puffer, &sBlock, sizeof(superblock));
+                blockDevice->write(0, puffer); //Block 0 = superblock (immer, per def.) lesen
+
+                writeDmapToDisc();
+                writeFatToDisc();
+                writeRootToDisc();
             }
+        }
+        //dmap Initialisierung true
+        dmap[sBlock.dataSize];
+        for (int i = 0; i < sBlock.blockDeviceSize - sBlock.dataAddress - 1; i++) {
+            dmap[i] = true;
+        }
+        //fat Initialisierung 0xffff..
+        fat[sBlock.dataSize];
+        for (int i = 0; i < 1012; i++) {
+            fat[i] = INT32_MAX; //Das sind 16 fs, je 4 bit
+        }
+
+        //root Initialisierung
+        actualFiles = 0;
+        openFiles = 0;
+        //root in myondiskfs.h initialisiert
+        for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
+            root[i].data = nullptr;
+            root[i].dataSize = 0;
         }
 
         if(ret < 0) {
@@ -324,6 +567,66 @@ void MyOnDiskFS::fuseDestroy() {
 }
 
 // TODO: [PART 2] You may add your own additional methods here!
+
+// Additional methods:
+
+bool MyOnDiskFS::fileExists(const char *path) {
+    for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
+        if (root[i].name[0] == '/') {
+            if (strcmp(root[i].name, path) == 0) {
+                return true;
+            }
+        }
+    }
+}
+
+file *MyOnDiskFS::findFile(const char *path) {
+    for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
+        if (root[i].name[0] != '\0') {
+            if (strcmp(root[i].name, path) == 0) {
+                return &root[i];
+            }
+        }
+    }
+    return nullptr;
+}
+
+void MyOnDiskFS::writeFatToDisc() {
+    char puffer[BLOCK_SIZE];
+    for(int i = 0; i < (double) sizeof(fat) / BLOCK_SIZE; i++){
+        if(i>sizeof(fat)/BLOCK_SIZE){
+            memcpy(puffer, &fat + i * BLOCK_SIZE, sizeof(fat) - i * BLOCK_SIZE);
+        } else {
+            memcpy(puffer, &fat + i * BLOCK_SIZE, BLOCK_SIZE);
+        }
+        blockDevice->write(sBlock.fatAddress + i, puffer); //Block 3ff. = fatAddress lesen
+    }
+}
+
+void MyOnDiskFS::writeRootToDisc() {
+    char puffer[BLOCK_SIZE];
+    for(int i = 0; i < (double) sizeof(root) / BLOCK_SIZE; i++){
+        if(i > sizeof(root)/BLOCK_SIZE){
+            memcpy(puffer, &root + i * BLOCK_SIZE, sizeof(root) - i * BLOCK_SIZE);
+        } else {
+            memcpy(puffer, &root + i * BLOCK_SIZE, BLOCK_SIZE);
+        }
+        blockDevice->write(sBlock.rootAddress + i, puffer); //Block 11ff. = rootAddress lesen
+    }
+}
+
+void MyOnDiskFS::writeDmapToDisc(){
+    char puffer[BLOCK_SIZE];
+    for(int i = 0; i < (double) sizeof(dmap) / BLOCK_SIZE - 1; i++) {
+        if(i > sizeof(dmap)/BLOCK_SIZE){
+            sizeof(dmap) - i * BLOCK_SIZE;
+            memcpy(puffer, &dmap + i * BLOCK_SIZE,  sizeof(dmap) - i * BLOCK_SIZE);
+        } else {
+            memcpy(puffer, &dmap + i * BLOCK_SIZE, BLOCK_SIZE);
+        }
+        blockDevice->write(sBlock.dmapAddress + i, puffer); //Block 1 = dmapAddress lesen
+    }
+}
 
 // DO NOT EDIT ANYTHING BELOW THIS LINE!!!
 

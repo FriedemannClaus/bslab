@@ -7,16 +7,37 @@
 #define MYFS_MYONDISKFS_H
 
 #include "myfs.h"
+#include <map>
+using namespace std;
 
 /// @brief On-disk implementation of a simple file system.
 class MyOnDiskFS : public MyFS {
+private:
+    virtual bool fileExists(const char *path);
+    virtual file* findFile(const char *name);
+    virtual void writeFatToDisc();
+    virtual void writeDmapToDisc();
+    virtual void writeRootToDisc();
+
 protected:
-    // BlockDevice blockDevice;
+    //BlockDevice blockDevice; (Eig mit *)
 
 public:
     static MyOnDiskFS *Instance();
 
-    // TODO: [PART 1] Add attributes of your file system here
+    // TODO: [PART 2] Add attributes of your file system here
+    int fat[1012]; //Muss man ändern wenn man Blocksize ändern will
+    bool dmap[1012]; //Muss man ändern wenn man Blocksize ändern will
+    file root[NUM_DIR_ENTRIES];
+    struct superblock{
+        int dmapAddress; // = 1
+        int fatAddress; // = 3
+        int rootAddress; // = 11 // 320 bytes laut sizeof. 320 * 64 /512 = 40 Blöcke für file root[64]
+        int dataAddress; //ab Block 52 Filesystem
+        int blockDeviceSize; //= 1024 (including metadata(fat, root, ...))
+        int dataSize; //1012
+    };
+    superblock sBlock;
 
     MyOnDiskFS();
     ~MyOnDiskFS();

@@ -449,9 +449,8 @@ int MyInMemoryFS::fuseReaddir(const char *path, void *buf, fuse_fill_dir_t fille
                 LOGF("Found file: %s",myFiles[i].name);
             }
         }
-
-        RETURN(0);
     }
+    RETURN(0);
 }
 
 /// Initialize a file system.

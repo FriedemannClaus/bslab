@@ -26,6 +26,8 @@ public:
     static MyFS *Instance();
     
     // TODO: [PART 2] You may add attributes of your file system here
+    int actualFiles;
+    int openFiles;
     
     MyFS();
     virtual ~MyFS();

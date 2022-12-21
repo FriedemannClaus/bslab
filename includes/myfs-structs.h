@@ -13,18 +13,19 @@
 #define BLOCK_SIZE 512
 #define NUM_DIR_ENTRIES 64
 #define NUM_OPEN_FILES 64
+#define BLOCK_DEVICE_SIZE 1024
 
 struct file{
-    char name[NAME_LENGTH]="";
-    size_t dataSize;
-    uid_t user;
-    gid_t group;
-    mode_t mode;
-    time_t atime;
+    char name[NAME_LENGTH]=""; //255 bytes lang max
+    size_t dataSize; //unsigned long
+    uid_t user; //insigned int
+    gid_t group; //unsigned int
+    mode_t mode; //unsigned int
+    time_t atime; //long
     time_t mtime;
     time_t ctime;
-    char* data;
-    bool open;
-};
+    char* data; //64bit für Pointer in 64-bit Betriebssystem = 8 bytes
+    bool open; //1bit bzw < 1byte
+}; // 320 bytes laut sizeof. 320 * 64 /512 = 40 Blöcke für file root[64]
 
 #endif /* myfs_structs_h */
