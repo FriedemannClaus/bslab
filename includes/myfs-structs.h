@@ -25,6 +25,7 @@ struct file{
     time_t mtime;
     time_t ctime;
     char* data; //64bit für Pointer in 64-bit Betriebssystem = 8 bytes
+    int fat_data;
     bool open; //1bit bzw < 1byte
 }; // 320 bytes laut sizeof. 320 * 64 /512 = 40 Blöcke für file root[64]
 

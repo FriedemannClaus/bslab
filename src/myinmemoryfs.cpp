@@ -339,10 +339,10 @@ MyInMemoryFS::fuseWrite(const char *path, const char *buf, size_t size, off_t of
     if (myFile != nullptr) {
         if (myFile->open) {
             if (myFile->dataSize < (size + offset)) {
-                fuseTruncate(path,size+offset);
-                memcpy(myFile->data+offset,buf,size);
+                fuseTruncate(path, size + offset);
+                memcpy(myFile->data + offset, buf, size);
             } else {
-                memcpy(myFile->data+offset,buf,size);
+                memcpy(myFile->data + offset, buf, size);
             }
             RETURN(size);
         } else {
@@ -387,7 +387,7 @@ int MyInMemoryFS::fuseTruncate(const char *path, off_t newSize) {
     file *myFile= findFile(path);
     if(myFile!= nullptr){
         myFile->data= (char *) (realloc(myFile->data, newSize));
-        if(myFile->data== nullptr){
+        if (myFile->data == nullptr) {
             RETURN(-ENOSPC);
         }
         myFile->dataSize=newSize;
