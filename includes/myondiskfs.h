@@ -19,6 +19,8 @@ private:
     virtual void writeDmapToDisc();
     virtual void writeRootToDisc();
 
+    virtual int findEmptyDataBlock();
+
 protected:
     //BlockDevice blockDevice; (Eig mit *)
 
@@ -45,6 +47,8 @@ public:
         file *filePointer = nullptr;
     };
     OpenFile openFiles[NUM_OPEN_FILES];
+
+    MyOnDiskFS();
 
     ~MyOnDiskFS();
 

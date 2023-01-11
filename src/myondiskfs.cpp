@@ -31,6 +31,7 @@
 MyOnDiskFS::MyOnDiskFS() : MyFS() {
     // create a block device object
     this->blockDevice = new BlockDevice(BLOCK_SIZE);
+
     //dmap Initialisierung true
     dmap[sBlock.dataSize];
     for (int i = 0; i < sBlock.blockDeviceSize - sBlock.dataAddress - 1; i++) {
@@ -47,7 +48,7 @@ MyOnDiskFS::MyOnDiskFS() : MyFS() {
     openFilesCount = 0;
     //root in myondiskfs.h initialisiert
     for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
-        root[i].data = nullptr;
+        root[i].fat_data = -1;
         root[i].dataSize = 0;
     }
 
@@ -355,7 +356,7 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
     file *myFile = findFile(path);
     if (myFile != nullptr) {
         if (myFile->open) {
-            if (myFile->data != nullptr) {
+            if (myFile->fat_data != -1) {
                 int sizeToRead;
                 if (myFile->dataSize < size + offset) {
                     sizeToRead = myFile->dataSize - offset;
@@ -368,7 +369,7 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
                 if (offset % BLOCK_SIZE != 0) {
                     firstBlockOffset = offset - (firstBlockIndex * BLOCK_SIZE);
                 }
-                int fatIndex = (long) myFile->data;
+                int fatIndex = myFile->fat_data;
                 for (int i = 0; i < firstBlockIndex; ++i) {
                     fatIndex = fat[fatIndex];
                 }
@@ -444,7 +445,7 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
             if (offset % BLOCK_SIZE != 0) {
                 firstBlockOffset = offset - (firstBlockIndex * BLOCK_SIZE);
             }
-            int fatIndex = (long) myFile->data;
+            int fatIndex = myFile->fat_data;
             for (int i = 0; i < firstBlockIndex; ++i) {
                 fatIndex = fat[fatIndex];
             }
@@ -528,28 +529,71 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize) {
     // TODO: [PART 2] Implement this!
 
     file *myFile = findFile(path);
-    if (myFile != nullptr) {
-
-        if (newSize > myFile->dataSize) {
-            int oldBlockCount = myFile->dataSize / BLOCK_SIZE;
-            int newBlockCount = newSize / BLOCK_SIZE;
-            if (oldBlockCount != newBlockCount) {
-                int allocateCount = newBlockCount - oldBlockCount;
-                for (int i = 0; i < allocateCount; ++i) {
-
-                }
-            }
-        }
-
-        myFile->data = (char *) (realloc(myFile->data, newSize));
-        if (myFile->data == nullptr) {
-            RETURN(-ENOSPC);
-        }
-        myFile->dataSize = newSize;
-    } else {
+    if (myFile == nullptr) {
         RETURN(-ENOENT);
     }
 
+    int oldBlockCount = ceil((double) myFile->dataSize / BLOCK_SIZE);
+    int newBlockCount = ceil((double) newSize / BLOCK_SIZE);
+    int allocateCount = newBlockCount - oldBlockCount;
+    if (newSize > myFile->dataSize) { //Vergroessern
+        if (allocateCount > 0) {
+            int actualIndex = 0;
+            int i = 0;
+            if (myFile->dataSize == 0) {   //Leeres file
+                int index = findEmptyDataBlock();
+                if (index < 0) {
+                    RETURN(index); //=ENOSPACE
+                }
+                fat[index] = EOF;
+                dmap[index] = true;
+                actualIndex = index;
+                myFile->fat_data = actualIndex;
+                i++;
+            } else { //normales, nichtleeres file: actualIndex bestimmen
+                actualIndex = myFile->fat_data;
+                while (fat[actualIndex] != EOF) {
+                    actualIndex = fat[actualIndex];
+                }
+            }
+            while (i < allocateCount) {
+                int index = findEmptyDataBlock();
+                if (index < 0) {
+                    RETURN(index); //=ENOSPACE
+                }
+                fat[index] = EOF;
+                dmap[index] = true;
+                fat[actualIndex] = index;
+                actualIndex = index;
+                i++;
+            }
+        }
+    } else { //Verkleinern
+        if (allocateCount > 0) {
+            int startToDelete = oldBlockCount - allocateCount;
+
+            //wo ist der letzte Block (actualIndex)
+            int actualIndex = myFile->fat_data;
+            int blocks = 0;
+            while (blocks < startToDelete) {
+                actualIndex = fat[actualIndex];
+                blocks++;
+            }
+
+            //verkleinern ausfuehren
+            int index = fat[actualIndex];
+            fat[actualIndex] = EOF;
+            while (fat[index] != EOF) {
+                actualIndex = index;
+                index = fat[actualIndex];
+                fat[actualIndex] = INT32_MAX;
+            }
+        }
+    }
+    myFile->dataSize = newSize;
+    writeRootToDisc();
+    writeDmapToDisc();
+    writeFatToDisc();
     RETURN(0);
 }
 
@@ -566,7 +610,76 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize) {
 int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_info *fileInfo) {
     LOGM();
 
-    // TODO: [PART 2] Implement this!
+
+    file *myFile = findFile(path);
+    if (myFile == nullptr) {
+        RETURN(-ENOENT);
+    }
+
+    int oldBlockCount = ceil((double) myFile->dataSize / BLOCK_SIZE);
+    int newBlockCount = ceil((double) newSize / BLOCK_SIZE);
+    int allocateCount = newBlockCount - oldBlockCount;
+    if (newSize > myFile->dataSize) { //Vergroessern
+        if (allocateCount > 0) {
+            int actualIndex = 0;
+            int i = 0;
+            if (myFile->dataSize == 0) {   //Leeres file
+                int index = findEmptyDataBlock();
+                if (index < 0) {
+                    RETURN(index); //=ENOSPACE
+                }
+                fat[index] = EOF;
+                dmap[index] = true;
+                actualIndex = index;
+                myFile->fat_data = actualIndex;
+                i++;
+            } else { //normales, nichtleeres file: actualIndex bestimmen
+                actualIndex = myFile->fat_data;
+                while (fat[actualIndex] != EOF) {
+                    actualIndex = fat[actualIndex];
+                }
+            }
+            while (i < allocateCount) {
+                int index = findEmptyDataBlock();
+                if (index < 0) {
+                    RETURN(index); //=ENOSPACE
+                }
+                fat[index] = EOF;
+                dmap[index] = true;
+                fat[actualIndex] = index;
+                actualIndex = index;
+                i++;
+            }
+        }
+    } else { //Verkleinern
+        if (allocateCount > 0) {
+            int startToDelete = oldBlockCount - allocateCount;
+
+            //wo ist der letzte Block (actualIndex)
+            int actualIndex = myFile->fat_data;
+            int blocks = 0;
+            while (blocks < startToDelete) {
+                actualIndex = fat[actualIndex];
+                blocks++;
+            }
+
+            //verkleinern ausfuehren
+            int index = fat[actualIndex];
+            fat[actualIndex] = EOF;
+            while (fat[index] != EOF) {
+                if (openFiles[fileInfo->fh].blockNo == index) {
+                    openFiles[fileInfo->fh].blockNo = -1;
+                }
+                actualIndex = index;
+                index = fat[actualIndex];
+                fat[actualIndex] = INT32_MAX;
+            }
+        }
+    }
+    myFile->dataSize = newSize;
+    writeRootToDisc();
+    writeDmapToDisc();
+    writeFatToDisc();
 
     RETURN(0);
 }
@@ -647,7 +760,7 @@ void *MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
                 memcpy(&dmap + i * BLOCK_SIZE, puffer, BLOCK_SIZE);
                 i++;
             }
-            if ((sizeof(dmap) % BD_BLOCK_SIZE) != 0) {
+            if ((sizeof(dmap) % BLOCK_SIZE) != 0) {
                 blockDevice->read(sBlock.dmapAddress + i, puffer);
                 memcpy(&dmap + i * BLOCK_SIZE, puffer, sizeof(dmap) - i * BLOCK_SIZE);
             }
@@ -658,7 +771,7 @@ void *MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
                 memcpy(&fat + i * BLOCK_SIZE, puffer, BLOCK_SIZE);
                 i++;
             }
-            if ((sizeof(fat) % BD_BLOCK_SIZE) != 0) {
+            if ((sizeof(fat) % BLOCK_SIZE) != 0) {
                 blockDevice->read(sBlock.fatAddress + i, puffer);
                 memcpy(&fat + i * BLOCK_SIZE, puffer, sizeof(fat) - i * BLOCK_SIZE);
             }
@@ -785,6 +898,15 @@ void MyOnDiskFS::writeDmapToDisc() {
         memcpy(puffer, &dmap + i * BLOCK_SIZE, sizeof(dmap) - i * BLOCK_SIZE);
         blockDevice->write(sBlock.dmapAddress + i, puffer);
     }
+}
+
+int MyOnDiskFS::findEmptyDataBlock() {
+    for (int j = 0; j < sBlock.dataSize; ++j) {
+        if (dmap[j] == false) {
+            return j;
+        }
+    }
+    return -ENOSPC;
 }
 
 // DO NOT EDIT ANYTHING BELOW THIS LINE!!!
