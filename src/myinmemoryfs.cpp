@@ -258,9 +258,9 @@ int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
 
     file *myFile = findFile(path);
     if (myFile != nullptr) {
-        if (openFiles < NUM_OPEN_FILES) {
+        if (openFilesCount < NUM_OPEN_FILES) {
             myFile->open = true;
-            openFiles++;
+            openFilesCount++;
         } else {
             RETURN(-EMFILE);
         }
@@ -365,7 +365,7 @@ int MyInMemoryFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo)
     file *myFile = findFile(path);
     if (myFile != nullptr) {
         myFile->open = false;
-        openFiles--;
+        openFilesCount--;
     } else {
         RETURN(-ENOENT);
     }
@@ -473,7 +473,7 @@ void *MyInMemoryFS::fuseInit(struct fuse_conn_info *conn) {
         LOG("Using in-memory mode");
 
         actualFiles = 0;
-        openFiles = 0;
+        openFilesCount = 0;
         for (int i = 0; i < NUM_DIR_ENTRIES; i++) {
             myFiles[i].data = nullptr;
             myFiles[i].dataSize=0;

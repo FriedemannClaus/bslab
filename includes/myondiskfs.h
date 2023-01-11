@@ -29,7 +29,7 @@ public:
     int fat[1012]; //Muss man ändern wenn man Blocksize ändern will
     bool dmap[1012]; //Muss man ändern wenn man Blocksize ändern will
     file root[NUM_DIR_ENTRIES];
-    struct superblock{
+    struct superblock {
         int dmapAddress; // = 1
         int fatAddress; // = 3
         int rootAddress; // = 11 // 320 bytes laut sizeof. 320 * 64 /512 = 40 Blöcke für file root[64]
@@ -38,8 +38,14 @@ public:
         int dataSize; //1012
     };
     superblock sBlock;
+    struct OpenFile {
+        char buffer[BLOCK_SIZE];
+        int blockNo = -1;
+        bool isOpen = false;
+        file *filePointer = nullptr;
+    };
+    OpenFile openFiles[NUM_OPEN_FILES];
 
-    MyOnDiskFS();
     ~MyOnDiskFS();
 
     static void SetInstance();
@@ -47,7 +53,9 @@ public:
     // --- Methods called by FUSE ---
     // For Documentation see https://libfuse.github.io/doxygen/structfuse__operations.html
     virtual int fuseGetattr(const char *path, struct stat *statbuf);
+
     virtual int fuseMknod(const char *path, mode_t mode, dev_t dev);
+
     virtual int fuseUnlink(const char *path);
     virtual int fuseRename(const char *path, const char *newpath);
     virtual int fuseChmod(const char *path, mode_t mode);

@@ -27,7 +27,7 @@ public:
     
     // TODO: [PART 2] You may add attributes of your file system here
     int actualFiles;
-    int openFiles;
+    int openFilesCount;
     
     MyFS();
     virtual ~MyFS();
