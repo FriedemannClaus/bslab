@@ -24,9 +24,25 @@ struct file{
     time_t atime; //long
     time_t mtime;
     time_t ctime;
-    char* data; //64bit für Pointer in 64-bit Betriebssystem = 8 bytes
+    char *data; //64bit für Pointer in 64-bit Betriebssystem = 8 bytes
     int fat_data;
     bool open; //1bit bzw < 1byte
 }; // 320 bytes laut sizeof. 320 * 64 /512 = 40 Blöcke für file root[64]
+
+struct superblock {
+    int dmapAddress; // = 1
+    int fatAddress; // = 3
+    int rootAddress; // = 11 // 320 bytes laut sizeof. 320 * 64 /512 = 40 Blöcke für file root[64]
+    int dataAddress; //ab Block 52 Filesystem
+    int blockDeviceSize; //= 1024 (including metadata(fat, root, ...))
+    int dataSize; //1012
+};
+
+struct OpenFile {
+    char buffer[BLOCK_SIZE];
+    int blockNo = -1;
+    bool isOpen = false;
+    file *filePointer = nullptr;
+};
 
 #endif /* myfs_structs_h */
