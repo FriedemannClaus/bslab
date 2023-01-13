@@ -345,11 +345,11 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
     if (myFile != nullptr) {
         if (myFile->open) {
             if (myFile->fat_data != -1) {
-                int sizeToRead;
+                int calculatedSize;
                 if (myFile->dataSize < size + offset) {
-                    sizeToRead = myFile->dataSize - offset;
+                    calculatedSize = myFile->dataSize - offset;
                 } else {
-                    sizeToRead = size;
+                    calculatedSize = size;
                 }
 
                 int firstBlockIndex = (offset / BLOCK_SIZE);
@@ -361,10 +361,45 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
                 for (int i = 0; i < firstBlockIndex; ++i) {
                     fatIndex = fat[fatIndex];
                 }
-                int blocksToRead = ceil((double) sizeToRead / BLOCK_SIZE);
+                //int blocksToRead = ceil((double) calculatedSize / BLOCK_SIZE);
 
                 char *dataBlock = (char *) malloc(BLOCK_SIZE);
-                for (int i = 0; i < blocksToRead; i++) {
+
+                size_t offsetBuf = 0;
+                size_t bytesToRead = calculatedSize;
+
+                while (bytesToRead > 0) {
+                    if (fatIndex == openFiles[fileInfo->fh].blockNo) {
+                        memcpy(dataBlock, openFiles[fileInfo->fh].buffer, BLOCK_SIZE);
+                    } else {
+                        blockDevice->read(fatIndex, dataBlock);
+                    }
+                    if (bytesToRead == calculatedSize) {
+                        if (bytesToRead > BLOCK_SIZE - firstBlockOffset) {
+                            memcpy(buf, dataBlock + offset, BLOCK_SIZE - firstBlockOffset);
+                            bytesToRead -= BLOCK_SIZE - firstBlockOffset;
+                            offsetBuf += BLOCK_SIZE - firstBlockOffset;
+                        } else {
+                            memcpy(buf, dataBlock + firstBlockOffset, bytesToRead);
+                            bytesToRead = 0;
+                        }
+                    } else {
+                        if (bytesToRead < BLOCK_SIZE) {
+                            memcpy(buf + offsetBuf, dataBlock, bytesToRead);
+                            bytesToRead = 0;
+                        } else {
+                            memcpy(buf + offsetBuf, dataBlock, BLOCK_SIZE);
+                            offsetBuf += BLOCK_SIZE;
+                            bytesToRead -= BLOCK_SIZE;
+                        }
+                    }
+                    fatIndex = fat[fatIndex];
+                }
+                memcpy(openFiles[fileInfo->fh].buffer, dataBlock, BLOCK_SIZE);
+                openFiles[fileInfo->fh].blockNo = fatIndex;
+
+
+                /*for (int i = 0; i < blocksToRead; i++) {
                     if (fatIndex != EOF) {
                         if (fatIndex == openFiles[fileInfo->fh].blockNo) {
                             memcpy(dataBlock, openFiles[fileInfo->fh].buffer, BLOCK_SIZE);
@@ -373,9 +408,9 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
                         }
                         if (i == 0) {
                             memcpy(buf, dataBlock + firstBlockOffset, BLOCK_SIZE);
-                        } else if (i == (blocksToRead - 1) && ((offset + sizeToRead) % BLOCK_SIZE)) {
-                            int index = (offset + sizeToRead) / BLOCK_SIZE;
-                            int lastBlockOffset = ((offset + sizeToRead) - (index * BLOCK_SIZE));
+                        } else if (i == (blocksToRead - 1) && ((offset + calculatedSize) % BLOCK_SIZE)) {
+                            int index = (offset + calculatedSize) / BLOCK_SIZE;
+                            int lastBlockOffset = ((offset + calculatedSize) - (index * BLOCK_SIZE));
                             memcpy(buf + i * BLOCK_SIZE, dataBlock, lastBlockOffset);
                         } else {
                             memcpy(buf + i * BLOCK_SIZE, dataBlock, BLOCK_SIZE);
@@ -386,11 +421,12 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
                         }
                         fatIndex = fat[fatIndex];
                     }
-                }
+                }*/
                 LOGF("gelesen: %s", buf);
+                LOGF("File size: %d", myFile->dataSize);
                 free(dataBlock);
 
-                RETURN(sizeToRead);
+                RETURN(calculatedSize);
             } else {
                 RETURN(-EBADF);
             }
@@ -456,7 +492,7 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
                 if (bytesToWrite == size) { // if bytesToWrite > BLOCK_SIZE
                     if (bytesToWrite > BLOCK_SIZE - firstBlockOffset) {
                         memcpy(dataBlock + firstBlockOffset, buf, BLOCK_SIZE - firstBlockOffset);
-                        bytesToWrite = BLOCK_SIZE - firstBlockOffset;
+                        bytesToWrite -= BLOCK_SIZE - firstBlockOffset;
                         offsetBuf += BLOCK_SIZE - firstBlockOffset;
                     } else {
                         memcpy(dataBlock + firstBlockOffset, buf, bytesToWrite);

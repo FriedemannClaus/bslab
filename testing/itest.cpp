@@ -489,3 +489,84 @@ TEST_CASE("T-1.10", "[Part_1]") {
     // remove file
     REQUIRE(unlink(FILENAME) >= 0);
 }
+
+TEST_CASE("T-1.11", "[Part_1]") {
+    printf("Testcase 1.11: Write to multiple files\n");
+
+    int fileSize = 1024;
+    int writeSize = 16;
+    const char *filename = "file";
+    int noFiles = 1;
+
+    off_t bufferSize = 1024; //1024
+
+    char *w = new char[bufferSize];
+    memset(w, 0, bufferSize);
+    gen_random(w, (int) bufferSize);
+
+    char *r = new char[bufferSize];
+    memset(r, 0, bufferSize);
+
+    int ret;
+    size_t b;
+
+    int fd[noFiles];
+
+    // open all files
+    for (int f = 0; f < noFiles; f++) {
+        char nFilename[strlen(filename) + 10];
+        sprintf(nFilename, "%s_%d", filename, f);
+        unlink(nFilename);
+        fd[f] = open(nFilename, O_EXCL | O_RDWR | O_CREAT, 0666);
+        REQUIRE(fd[f] >= 0);
+    }
+
+    // write incrementally to all files
+    for (off_t offset = 0; offset < bufferSize; offset += writeSize) {
+        off_t toWrite = offset + writeSize < bufferSize ? writeSize : bufferSize - offset;
+
+        for (int f = 0; f < noFiles; f++) {
+            b = lseek(fd[f], offset, SEEK_SET);
+            REQUIRE(b == offset);
+
+            b = write(fd[f], w + offset, toWrite);
+            REQUIRE(b == toWrite);
+        }
+    }
+
+    // close all files
+    for (int f = 0; f < noFiles; f++) {
+        ret = close(fd[f]);
+        REQUIRE(ret >= 0);
+    }
+
+    // check all files
+    for (int f = 0; f < noFiles; f++) {
+        char nFilename[strlen(filename) + 10];
+        sprintf(nFilename, "%s_%d", filename, f);
+
+        int fd = open(nFilename, O_RDONLY);
+        REQUIRE(fd >= 0);
+
+        b = read(fd, r, bufferSize);
+        REQUIRE(b == bufferSize);
+        /*char* r2 = new char[bufferSize + 1];
+        memcpy(r2, r, bufferSize);
+        r2[bufferSize] = '\0';
+        char* w2 = new char[bufferSize + 1];
+        memcpy(w2, w, bufferSize);
+        w2[bufferSize] = '\0';
+        printf("r: %s", r2);
+        printf("w: %s", w2);*/
+        REQUIRE(memcmp(r, w, bufferSize) == 0);
+
+        ret = close(fd);
+        REQUIRE(ret >= 0);
+
+        ret = unlink(nFilename);
+        REQUIRE(ret >= 0);
+    }
+
+    delete[] r;
+    delete[] w;
+}
