@@ -429,8 +429,7 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
                 fuseTruncate(path, size + offset, fileInfo);
             }
 
-            int firstBlockIndex = (offset /
-                                   BLOCK_SIZE); //Anzahl der vollständigen Blöcke vor dem unvollständigen Block 8
+            int firstBlockIndex = (offset / BLOCK_SIZE); //Anzahl der vollständigen Blöcke vor dem unvollständigen Block 8
             int firstBlockOffset = 0;
             if (offset % BLOCK_SIZE != 0) {
                 firstBlockOffset = offset - (firstBlockIndex * BLOCK_SIZE); //Offset im unvollständigen Block
