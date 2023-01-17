@@ -74,22 +74,23 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     if (actualFiles >= NUM_DIR_ENTRIES) {
         RETURN(-ENOSPC);
     }
-    int i = 0;
-    while ((myFiles[i].name[0]!= '\0' ) && (i < NUM_DIR_ENTRIES)) {
-        i++;
-    }
+
     size_t pathLength = strlen(path);
     if (pathLength > NAME_LENGTH) {
         RETURN(-ENAMETOOLONG);
-    } else if (fileExists(path)) {
-        RETURN(-EEXIST);
-    } else {
-        strcpy(myFiles[i].name, path);
-        myFiles[i].mode = mode;
-
-        actualFiles++;
     }
 
+    if (fileExists(path)) {
+        RETURN(-EEXIST);
+    }
+
+    int i = 0;
+    while ((myFiles[i].name[0] != '\0') && (i < NUM_DIR_ENTRIES)) {
+        i++;
+    }
+    strcpy(myFiles[i].name, path);
+    myFiles[i].mode = mode;
+    actualFiles++;
     RETURN(0);
 }
 
@@ -507,6 +508,7 @@ bool MyInMemoryFS::fileExists(const char *path) {
             }
         }
     }
+    return false;
 }
 
 file *MyInMemoryFS::findFile(const char *path) {

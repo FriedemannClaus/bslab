@@ -981,6 +981,7 @@ bool MyOnDiskFS::fileExists(const char *path) {
             }
         }
     }
+    return false;
 }
 
 file *MyOnDiskFS::findFile(const char *path) {
