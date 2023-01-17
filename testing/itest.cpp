@@ -245,7 +245,7 @@ TEST_CASE("T-1.05", "[Part_1]") {
     printf("Testcase 1.5: Append beyond the end of a file\n");
     const char *buf1= "abcde";
     const char *buf2= "xyz";
-    char *buf4= new char[strlen(buf1)];
+    char *buf4 = new char[strlen(buf1)];
 
     int fd;
 //    ssize_t b;
@@ -381,18 +381,18 @@ TEST_CASE("T-1.08", "[Part_1]") {
 TEST_CASE("T-1.09", "[Part_1]") {
     printf("Testcase 1.9: Write to multiple files\n");
 
-    int fileSize= SMALL_SIZE;
-    int writeSize= 16;
+    int fileSize = SMALL_SIZE;
+    int writeSize = 16;
     const char *filename = "file";
-    int noFiles= 64;
+    int noFiles = 64;
 
-    off_t bufferSize= (fileSize/writeSize)*writeSize;
+    off_t bufferSize = (fileSize / writeSize) * writeSize; //1024
 
-    char* w= new char[bufferSize];
+    char *w = new char[bufferSize];
     memset(w, 0, bufferSize);
     gen_random(w, (int) bufferSize);
 
-    char* r= new char[bufferSize];
+    char *r = new char[bufferSize];
     memset(r, 0, bufferSize);
 
     int ret;

@@ -7,18 +7,38 @@
 #define MYFS_MYONDISKFS_H
 
 #include "myfs.h"
+#include <map>
+using namespace std;
 
 /// @brief On-disk implementation of a simple file system.
 class MyOnDiskFS : public MyFS {
+private:
+    virtual bool fileExists(const char *path);
+    virtual file* findFile(const char *name);
+    virtual void writeFatToDisc();
+    virtual void writeDmapToDisc();
+    virtual void writeRootToDisc();
+
+    virtual int findEmptyDataBlock();
+
 protected:
-    // BlockDevice blockDevice;
+    //BlockDevice blockDevice; (Eig mit *)
 
 public:
     static MyOnDiskFS *Instance();
 
-    // TODO: [PART 1] Add attributes of your file system here
+    // TODO: [PART 2] Add attributes of your file system here
+    size_t FATSIZE = 1012 * sizeof(int);
+    size_t DMAPSIZE = 1012 * sizeof(bool);
+    size_t ROOTSIZE = NUM_DIR_ENTRIES * sizeof(file);
+    int *fat;
+    bool *dmap;
+    file *root;
+    superblock sBlock;
+    OpenFile openFiles[NUM_OPEN_FILES];
 
     MyOnDiskFS();
+
     ~MyOnDiskFS();
 
     static void SetInstance();
@@ -26,7 +46,9 @@ public:
     // --- Methods called by FUSE ---
     // For Documentation see https://libfuse.github.io/doxygen/structfuse__operations.html
     virtual int fuseGetattr(const char *path, struct stat *statbuf);
+
     virtual int fuseMknod(const char *path, mode_t mode, dev_t dev);
+
     virtual int fuseUnlink(const char *path);
     virtual int fuseRename(const char *path, const char *newpath);
     virtual int fuseChmod(const char *path, mode_t mode);

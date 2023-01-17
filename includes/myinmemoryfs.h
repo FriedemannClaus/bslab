@@ -15,14 +15,17 @@
 
 /// @brief In-memory implementation of a simple file system.
 class MyInMemoryFS : public MyFS {
+private:
+    virtual bool fileExists(const char *path);
+    virtual file* findFile(const char *name);
+
 protected:
     // BlockDevice blockDevice;
 
 public:
     static MyInMemoryFS *Instance();
 
-    // TODO: [PART 1] Add attributes of your file system here
-
+    file myFiles[NUM_DIR_ENTRIES];
     MyInMemoryFS();
     ~MyInMemoryFS();
 
@@ -45,9 +48,6 @@ public:
     virtual int fuseReaddir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fileInfo);
     virtual int fuseTruncate(const char *path, off_t offset, struct fuse_file_info *fileInfo);
     virtual void fuseDestroy();
-
-    // TODO: Add methods of your file system here
-
 };
 
 #endif //MYFS_MYINMEMORYFS_H

@@ -26,6 +26,8 @@ public:
     static MyFS *Instance();
     
     // TODO: [PART 2] You may add attributes of your file system here
+    int actualFiles;
+    int openFilesCount;
     
     MyFS();
     virtual ~MyFS();
@@ -71,7 +73,6 @@ public:
     virtual void fuseDestroy();
     
     // TODO: [PART 2] You may add methods of your file system here
-    
 };
 
 #endif /* myfs_h */

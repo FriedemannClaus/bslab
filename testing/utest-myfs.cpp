@@ -10,5 +10,8 @@
 
 #include "tools.hpp"
 #include "myfs.h"
+#include "myinmemoryfs.h"
+#include "fuse_common.h"
 
 // TODO: Implement your helper functions here!
+
