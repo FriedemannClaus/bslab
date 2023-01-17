@@ -549,9 +549,6 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
             free(dataBlock);
 
             LOGF("File size: %d", myFile->dataSize);
-            char *bufTest = new char[myFile->dataSize];
-            //fuseRead(path, bufTest, myFile->dataSize, 0, fileInfo);
-            delete[] bufTest;
             RETURN(size);
         } else {
             RETURN(-EBADF);
