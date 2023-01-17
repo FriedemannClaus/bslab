@@ -90,6 +90,8 @@ int MyInMemoryFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     }
     strcpy(myFiles[i].name, path);
     myFiles[i].mode = mode;
+    myFiles[i].atime = time(NULL);
+    myFiles[i].mtime = time(NULL);
     actualFiles++;
     RETURN(0);
 }
@@ -145,6 +147,7 @@ int MyInMemoryFS::fuseRename(const char *path, const char *newpath) {
         fuseUnlink(newpath);
     }
     strcpy(foundFile->name, newpath);
+    foundFile->mtime = time(NULL);
     RETURN(0);
 }
 
@@ -186,6 +189,8 @@ int MyInMemoryFS::fuseGetattr(const char *path, struct stat *statbuf) {
         statbuf->st_gid = getgid(); // The group of the file/directory is the same as the group of the user who mounted the filesystem
         statbuf->st_atime = time(NULL); // The last "a"ccess of the file/directory is right now
         statbuf->st_mtime = time(NULL); // The last "m"odification of the file/directory is right now
+        myFile->atime = time(NULL);
+        myFile->mtime = time(NULL);
 
         statbuf->st_mode = myFile->mode;
         statbuf->st_nlink = 1;
@@ -262,6 +267,7 @@ int MyInMemoryFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
         if (openFilesCount < NUM_OPEN_FILES) {
             myFile->open = true;
             openFilesCount++;
+            myFile->atime = time(NULL);
         } else {
             RETURN(-EMFILE);
         }
@@ -345,6 +351,7 @@ MyInMemoryFS::fuseWrite(const char *path, const char *buf, size_t size, off_t of
             } else {
                 memcpy(myFile->data + offset, buf, size);
             }
+            myFile->mtime = time(NULL);
             RETURN(size);
         } else {
             RETURN(-EBADF);
@@ -387,7 +394,8 @@ int MyInMemoryFS::fuseTruncate(const char *path, off_t newSize) {
 
     file *myFile= findFile(path);
     if(myFile!= nullptr){
-        myFile->data= (char *) (realloc(myFile->data, newSize));
+        myFile->data = (char *) (realloc(myFile->data, newSize));
+        myFile->mtime = time(NULL);
         if (myFile->data == nullptr) {
             RETURN(-ENOSPC);
         }
