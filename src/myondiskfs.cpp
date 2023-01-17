@@ -81,6 +81,8 @@ int MyOnDiskFS::fuseMknod(const char *path, mode_t mode, dev_t dev) {
     } else {
         strcpy(root[i].name, path);
         root[i].mode = mode;
+        root[i].atime = time(NULL);
+        root[i].mtime = time(NULL);
 
         //write root to disc
         writeRootToDisc();
@@ -162,6 +164,7 @@ int MyOnDiskFS::fuseRename(const char *path, const char *newpath) {
         fuseUnlink(newpath);
     }
     strcpy(foundFile->name, newpath);
+    foundFile->mtime = time(NULL);
     writeRootToDisc();
 
     RETURN(0);
@@ -207,6 +210,8 @@ int MyOnDiskFS::fuseGetattr(const char *path, struct stat *statbuf) {
         statbuf->st_gid = getgid(); // The group of the file/directory is the same as the group of the user who mounted the filesystem
         statbuf->st_atime = time(NULL); // The last "a"ccess of the file/directory is right now
         statbuf->st_mtime = time(NULL); // The last "m"odification of the file/directory is right now
+        myFile->atime = time(NULL);
+        myFile->mtime = time(NULL);
 
         statbuf->st_mode = myFile->mode;
         statbuf->st_nlink = 1;
@@ -302,6 +307,7 @@ int MyOnDiskFS::fuseOpen(const char *path, struct fuse_file_info *fileInfo) {
                 }
                 openFiles[i].isOpen = true;
                 fileInfo->fh = i;
+                myFile->atime = time(NULL);
                 openFilesCount++;
             }
         } else {
@@ -549,6 +555,11 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
             free(dataBlock);
 
             LOGF("File size: %d", myFile->dataSize);
+            char *bufTest = new char[myFile->dataSize];
+            //fuseRead(path, bufTest, myFile->dataSize, 0, fileInfo);
+            delete[] bufTest;
+            myFile->mtime = time(NULL);
+            writeRootToDisc();
             RETURN(size);
         } else {
             RETURN(-EBADF);
@@ -671,6 +682,7 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize) {
         }
     }
     myFile->dataSize = newSize;
+    myFile->mtime = time(NULL);
 
     writeRootToDisc();
     writeDmapToDisc();
@@ -773,6 +785,7 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
         }
     }
     myFile->dataSize = newSize;
+    myFile->mtime = time(NULL);
     writeRootToDisc();
     writeDmapToDisc();
     writeFatToDisc();
@@ -978,6 +991,7 @@ bool MyOnDiskFS::fileExists(const char *path) {
             }
         }
     }
+    return false;
 }
 
 file *MyOnDiskFS::findFile(const char *path) {
