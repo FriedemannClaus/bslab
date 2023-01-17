@@ -30,7 +30,6 @@
 /// You may add your own constructor code here.
 MyOnDiskFS::MyOnDiskFS() : MyFS() {
     // TODO: [PART 2] Add your constructor code here
-
     // create a block device object
     this->blockDevice = new BlockDevice(BLOCK_SIZE);
     fat = (int *) malloc(FATSIZE); //Muss man ändern wenn man Blocksize ändern will
@@ -340,39 +339,40 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
     // TODO: [PART 2] Implement this!
 
     LOGF("--> Trying to read %s, %lu, %lu\n", path, (unsigned long) offset, size);
+    LOGF("Buffer: %s", buf);
 
     file *myFile = findFile(path);
     if (myFile != nullptr) {
         if (myFile->open) {
             if (myFile->fat_data != -1) {
                 int calculatedSize;
-                if (myFile->dataSize < size + offset) {
+                if (myFile->dataSize <= size + offset) {
                     calculatedSize = myFile->dataSize - offset;
                 } else {
                     calculatedSize = size;
                 }
 
-                int firstBlockIndex = (offset / BLOCK_SIZE);
+                int firstBlockIndex = (offset / BLOCK_SIZE);//0
                 int firstBlockOffset = 0;
                 if (offset % BLOCK_SIZE != 0) {
                     firstBlockOffset = offset - (firstBlockIndex * BLOCK_SIZE);
                 }
                 int fatIndex = myFile->fat_data;
-                for (int i = 0; i < firstBlockIndex; ++i) {
+                for (int i = 0; i < firstBlockIndex; i++) {
                     fatIndex = fat[fatIndex];
                 }
                 //int blocksToRead = ceil((double) calculatedSize / BLOCK_SIZE);
 
-                char *dataBlock = (char *) malloc(BLOCK_SIZE);
+                char *dataBlock = new char[BLOCK_SIZE];
 
                 size_t offsetBuf = 0;
                 size_t bytesToRead = calculatedSize;
-
+                LOGF("Bytes to read: %d", bytesToRead);
                 while (bytesToRead > 0) {
                     if (fatIndex == openFiles[fileInfo->fh].blockNo) {
                         memcpy(dataBlock, openFiles[fileInfo->fh].buffer, BLOCK_SIZE);
                     } else {
-                        blockDevice->read(fatIndex, dataBlock);
+                        blockDevice->read(sBlock.dataAddress + fatIndex, dataBlock);
                     }
                     if (bytesToRead == calculatedSize) {
                         if (bytesToRead > BLOCK_SIZE - firstBlockOffset) {
@@ -385,6 +385,8 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
                         }
                     } else {
                         if (bytesToRead < BLOCK_SIZE) {
+                            LOGF("BytesToRead: %d", bytesToRead);
+                            LOGF("OffsetBuf: %d", offsetBuf);
                             memcpy(buf + offsetBuf, dataBlock, bytesToRead);
                             bytesToRead = 0;
                         } else {
@@ -393,7 +395,7 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
                             bytesToRead -= BLOCK_SIZE;
                         }
                     }
-                    fatIndex = fat[fatIndex];
+                    if (bytesToRead != 0) fatIndex = fat[fatIndex];
                 }
                 memcpy(openFiles[fileInfo->fh].buffer, dataBlock, BLOCK_SIZE);
                 openFiles[fileInfo->fh].blockNo = fatIndex;
@@ -424,7 +426,7 @@ int MyOnDiskFS::fuseRead(const char *path, char *buf, size_t size, off_t offset,
                 }*/
                 LOGF("gelesen: %s", buf);
                 LOGF("File size: %d", myFile->dataSize);
-                free(dataBlock);
+                delete[] dataBlock;
 
                 RETURN(calculatedSize);
             } else {
@@ -460,8 +462,6 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
     // TODO: Nochmal kontrollieren
     LOGF("Zu schreiben: %s", buf);
     LOGF("Offset: %d", offset);
-    LOGF("Size: %d", size);
-
 
     file *myFile = findFile(path);
     if (myFile != nullptr) {
@@ -469,7 +469,10 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
             if (myFile->dataSize < (size + offset)) {
                 fuseTruncate(path, size + offset, fileInfo);
             }
-            int firstBlockIndex = (offset / BLOCK_SIZE); //Anzahl der vollständigen Blöcke vor dem unvollständigen Block
+            LOGF("Size: %d", size);
+
+            int firstBlockIndex = (offset /
+                                   BLOCK_SIZE); //Anzahl der vollständigen Blöcke vor dem unvollständigen Block 8
             int firstBlockOffset = 0;
             if (offset % BLOCK_SIZE != 0) {
                 firstBlockOffset = offset - (firstBlockIndex * BLOCK_SIZE); //Offset im unvollständigen Block
@@ -478,6 +481,7 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
             for (int i = 0; i < firstBlockIndex; ++i) {
                 fatIndex = fat[fatIndex];
             }
+            //LOGF("fatIndex: %d", fatIndex);
             //int blocksToRead = ceil((double) (firstBlockOffset + size) / BLOCK_SIZE); //Anzahl der zu ladenden Datenblöcke von Festplatte
 
             char *dataBlock = (char *) malloc(BLOCK_SIZE);
@@ -486,14 +490,16 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
             while (bytesToWrite > 0) {
                 if (fatIndex == openFiles[fileInfo->fh].blockNo) {  //Pufferlesen
                     memcpy(dataBlock, openFiles[fileInfo->fh].buffer, BLOCK_SIZE);
+                    LOG("Puffer benutzt");
                 } else {
-                    blockDevice->read(fatIndex, dataBlock);
+                    blockDevice->read(sBlock.dataAddress + fatIndex, dataBlock);
                 }
                 if (bytesToWrite == size) { // if bytesToWrite > BLOCK_SIZE
                     if (bytesToWrite > BLOCK_SIZE - firstBlockOffset) {
                         memcpy(dataBlock + firstBlockOffset, buf, BLOCK_SIZE - firstBlockOffset);
-                        bytesToWrite -= BLOCK_SIZE - firstBlockOffset;
                         offsetBuf += BLOCK_SIZE - firstBlockOffset;
+                        bytesToWrite -= BLOCK_SIZE - firstBlockOffset;
+                        LOGF("erster Fall: OffsetBuf: %ld", offsetBuf);
                     } else {
                         memcpy(dataBlock + firstBlockOffset, buf, bytesToWrite);
                         bytesToWrite = 0;
@@ -506,10 +512,11 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
                         memcpy(dataBlock, buf + offsetBuf, BLOCK_SIZE);
                         offsetBuf += BLOCK_SIZE;
                         bytesToWrite -= BLOCK_SIZE;
+                        LOGF("Normalfall offsetBuf: %ld", offsetBuf);
                     }
                 }
-                blockDevice->write(fatIndex, dataBlock);
-                fatIndex = fat[fatIndex];
+                blockDevice->write(sBlock.dataAddress + fatIndex, dataBlock);
+                if (bytesToWrite != 0) fatIndex = fat[fatIndex];
             }
             memcpy(openFiles[fileInfo->fh].buffer, dataBlock, BLOCK_SIZE);
             openFiles[fileInfo->fh].blockNo = fatIndex;
@@ -538,8 +545,13 @@ MyOnDiskFS::fuseWrite(const char *path, const char *buf, size_t size, off_t offs
                     fatIndex = fat[fatIndex];
                 }
             }*/
+            LOGF("Last Datablock: %s", dataBlock);
             free(dataBlock);
 
+            LOGF("File size: %d", myFile->dataSize);
+            char *bufTest = new char[myFile->dataSize];
+            //fuseRead(path, bufTest, myFile->dataSize, 0, fileInfo);
+            delete[] bufTest;
             RETURN(size);
         } else {
             RETURN(-EBADF);
@@ -586,6 +598,7 @@ int MyOnDiskFS::fuseRelease(const char *path, struct fuse_file_info *fileInfo) {
 /// \return 0 on success, -ERRNO on failure.
 int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize) {
     LOGM();
+    LOGF("--> Trying to truncate %s, %ld\n", path, newSize);
 
     // TODO: [PART 2] Implement this!
 
@@ -596,7 +609,7 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize) {
 
     int oldBlockCount = ceil((double) myFile->dataSize / BLOCK_SIZE);
     int newBlockCount = ceil((double) newSize / BLOCK_SIZE);
-    int allocateCount = abs(newBlockCount - oldBlockCount);
+    int allocateCount = abs(newBlockCount - oldBlockCount);//8
     if (newSize > myFile->dataSize) { //Vergroessern
         if (allocateCount > 0) { // Wenn neue Size außerhalb der alten Blockgrenze liegt
             int actualIndex = 0;
@@ -614,6 +627,7 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize) {
             } else { //normales, nichtleeres file: actualIndex bestimmen
                 actualIndex = myFile->fat_data;
                 while (fat[actualIndex] != EOF) {
+                    LOGF("actualIndex: %d", actualIndex);
                     actualIndex = fat[actualIndex];
                 }
             }
@@ -642,16 +656,25 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize) {
             }
 
             //verkleinern ausfuehren
-            int index = fat[actualIndex];
-            fat[actualIndex] = EOF;
+            int index = fat[actualIndex];//Index hinter neuem letztem Block
+            if (startToDelete == 0) {
+                if (fat[actualIndex] != EOF) {
+                    fat[actualIndex] = INT32_MAX;
+                    dmap[actualIndex] = false;
+                }
+            }
             while (fat[index] != EOF) {
                 actualIndex = index;
                 index = fat[actualIndex];
                 fat[actualIndex] = INT32_MAX;
+                dmap[actualIndex] = false;
             }
+            fat[actualIndex] = INT32_MAX;
+            dmap[actualIndex] = false;
         }
     }
     myFile->dataSize = newSize;
+
     writeRootToDisc();
     writeDmapToDisc();
     writeFatToDisc();
@@ -670,7 +693,7 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize) {
 /// \return 0 on success, -ERRNO on failure.
 int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_info *fileInfo) {
     LOGM();
-
+    LOGF("--> Trying to truncate %s, %ld\n", path, newSize);
 
     file *myFile = findFile(path);
     if (myFile == nullptr) {
@@ -681,6 +704,7 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
     int newBlockCount = ceil((double) newSize / BLOCK_SIZE);
     int allocateCount = newBlockCount - oldBlockCount;
     if (newSize > myFile->dataSize) { //Vergroessern
+        LOGF("allocateCount: %d", allocateCount);
         if (allocateCount > 0) {
             int actualIndex = 0;
             int i = 0;
@@ -725,8 +749,16 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
             }
 
             //verkleinern ausfuehren
-            int index = fat[actualIndex];
-            fat[actualIndex] = EOF;
+            int index = fat[actualIndex];//Index hinter neuem letztem Block
+            if (startToDelete == 0) {
+                if (fat[actualIndex] != EOF) {
+                    if (openFiles[fileInfo->fh].blockNo == actualIndex) {
+                        openFiles[fileInfo->fh].blockNo = -1;
+                    }
+                    fat[actualIndex] = INT32_MAX;
+                    dmap[actualIndex] = false;
+                }
+            }
             while (fat[index] != EOF) {
                 if (openFiles[fileInfo->fh].blockNo == index) {
                     openFiles[fileInfo->fh].blockNo = -1;
@@ -734,7 +766,13 @@ int MyOnDiskFS::fuseTruncate(const char *path, off_t newSize, struct fuse_file_i
                 actualIndex = index;
                 index = fat[actualIndex];
                 fat[actualIndex] = INT32_MAX;
+                dmap[actualIndex] = false;
             }
+            if (openFiles[fileInfo->fh].blockNo == actualIndex) {
+                openFiles[fileInfo->fh].blockNo = -1;
+            }
+            fat[actualIndex] = INT32_MAX;
+            dmap[actualIndex] = false;
         }
     }
     myFile->dataSize = newSize;
@@ -855,6 +893,10 @@ void *MyOnDiskFS::fuseInit(struct fuse_conn_info *conn) {
 
             if (ret >= 0) {
                 // TODO: [PART 2] Create empty structures in file
+
+                LOGF("FATSIZE: %f", (double) FATSIZE / BLOCK_SIZE);
+                LOGF("DMAPSIZE: %f", (double) DMAPSIZE / BLOCK_SIZE);
+                LOGF("ROOTSIZE: %f", (double) ROOTSIZE / BLOCK_SIZE);
 
                 //(superblockAdress = Block 0)
                 int dmapAddress = 1;

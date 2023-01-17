@@ -42,7 +42,6 @@ struct OpenFile {
     char buffer[BLOCK_SIZE];
     int blockNo = -1;
     bool isOpen = false;
-    file *filePointer = nullptr;
 };
 
 #endif /* myfs_structs_h */
